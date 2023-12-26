@@ -10,4 +10,4 @@ Please review [COPYING](./COPYING.md) for detailed information in order to asses
 
 ## Contributing to the software
 
-If you wish to contribute changes, please review [our rules](./CONTRIBUTING.md).
+If you wish to contribute changes, please review [our rules](./CONTRIBUTING.md) governing contributions.
