@@ -1,6 +1,6 @@
 # Contributing 
 
-In order to have a concrete record that your contribution is intentional and you agree to license it under the same terms as the project's license, we've adopted the same lightweight approach that the Linux Kernel submitting patches process, Docker, and many other projects use: the [Developer Certificate of Origin](https://developercertificate.org/), or DCO. This is a simple declaration that you wrote the contribution or otherwise have the right to contribute it to this project.
+In order to have a concrete record that your contribution is intentional and you agree to license it under the same terms as [the project's license](./COPYING.md), we've adopted the same lightweight approach that the Linux Kernel submitting patches process, Docker, and many other projects use: the [Developer Certificate of Origin](https://developercertificate.org/), or DCO. This is a simple declaration that you wrote the contribution or otherwise have the right to contribute it to this project.
 
 If you agree to this for your contribution, then all that's needed is to include the line in your commit or pull request comment:
 
