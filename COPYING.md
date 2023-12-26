@@ -7,13 +7,14 @@ under different conditions.
 1. MIT License: 
    - This license applies only when the software is used exclusively in conjunction with a [jambonz](https://jambonz.org) voice server. 
    Specifically, that means all of the following conditions must be true:
+   
       i) The software is compiled and dynamically loaded into a running Freeswitch process 
       that is dedicated to providing services to a jambonz server or cluster.
 
       ii) All incoming calls to the Freeswitch instance running this software are 
       controlled via an outbound ESL socket connection from Freeswitch 
       to a Node.js application running the [jambonz feature server](https://github.com/jambonz/jambonz-feature-server) application. 
-      
+
    - For the full terms of the MIT License, see the [`LICENSE_MIT`](LICENSE_MIT) file.
 
 2. AGPL Version 3.0: 
