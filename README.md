@@ -4,10 +4,10 @@ A collection of Freeswitch modules intended for use with [jambonz](https://jambo
 
 ## Licensing
 
-This software is available under a dual-licensing scheme.  For specific use in a standalone [jambonz](https://jambonz.org) deployment, the [MIT License](./LICENSE_MIT) applies.  Please review [COPYING](./COPYING) for detailed information in order to assess whether your intended usage meets these specific conditions.  
+This software is available under a dual-licensing scheme.  For specific use in a standalone [jambonz](https://jambonz.org) deployment, the [MIT License](./LICENSE_MIT) applies.  For all other uses, the software is licensed for use under the [AGPL Version 3.0 license](./LICENSE_AGPL-3.0).
 
-For all other uses, the software is licensed for use under the [AGPL Version 3.0 license](./LICENSE_AGPL-3.0)
+Please review [COPYING](./COPYING) for detailed information in order to assess whether your intended usage meets these specific conditions.  
 
-## Contributing
+## Contributing to the software
 
-If you wish to contribute, please review [our rules](./CONTRIBUTING.md).
+If you wish to contribute changes, please review [our rules](./CONTRIBUTING.md).
