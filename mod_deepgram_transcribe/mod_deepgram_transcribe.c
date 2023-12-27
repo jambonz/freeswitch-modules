@@ -45,7 +45,6 @@ static switch_bool_t capture_callback(switch_media_bug_t *bug, void *user_data, 
 		{
 			private_t *tech_pvt = (private_t*) switch_core_media_bug_get_user_data(bug);
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Got SWITCH_ABC_TYPE_CLOSE.\n");
-
 			dg_transcribe_session_stop(session, 1,  tech_pvt->bugname);
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Finished SWITCH_ABC_TYPE_CLOSE.\n");
 		}
@@ -74,7 +73,7 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
 	void *pUserData;
 	uint32_t samples_per_second;
 
-	if (switch_channel_get_private(channel, MY_BUG_NAME)) {
+	if (switch_channel_get_private(channel, bugname)) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "removing bug from previous transcribe\n");
 		do_stop(session, bugname);
 	}
@@ -94,7 +93,7 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
 	if ((status = switch_core_media_bug_add(session, "dg_transcribe", NULL, capture_callback, pUserData, 0, flags, &bug)) != SWITCH_STATUS_SUCCESS) {
 		return status;
 	}
-  switch_channel_set_private(channel, MY_BUG_NAME, bug);
+  switch_channel_set_private(channel, bugname, bug);
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "added media bug for dg transcribe\n");
 
 	return SWITCH_STATUS_SUCCESS;
@@ -105,13 +104,16 @@ static switch_status_t do_stop(switch_core_session_t *session,  char* bugname)
 	switch_status_t status = SWITCH_STATUS_SUCCESS;
 
 	switch_channel_t *channel = switch_core_session_get_channel(session);
-	switch_media_bug_t *bug = switch_channel_get_private(channel, MY_BUG_NAME);
+	switch_media_bug_t *bug = switch_channel_get_private(channel, bugname);
 
 	if (bug) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Received user command command to stop transcribe.\n");
 		status = dg_transcribe_session_stop(session, 0, bugname);
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "stopped transcribe.\n");
 	}
+  else {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "do_stop: did not find bugname %s.\n", bugname);
+  }
 
 	return status;
 }
@@ -141,7 +143,7 @@ SWITCH_STANDARD_API(dg_transcribe_function)
 		if ((lsession = switch_core_session_locate(argv[0]))) {
 			if (!strcasecmp(argv[1], "stop")) {
 				char *bugname = argc > 2 ? argv[2] : MY_BUG_NAME;
-    		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "stop transcribing\n");
+    		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "stop transcribing %s\n", bugname);
 				status = do_stop(lsession, bugname);
 			} else if (!strcasecmp(argv[1], "start")) {
         char* lang = argv[2];
@@ -151,7 +153,8 @@ SWITCH_STANDARD_API(dg_transcribe_function)
           flags |= SMBF_WRITE_STREAM ;
           flags |= SMBF_STEREO;
 				}
-    		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "start transcribing %s %s\n", lang, interim ? "interim": "complete");
+    		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "start transcribing %s %s %s\n", 
+          lang, interim ? "interim": "complete", bugname);
 				status = start_capture(lsession, flags, lang, interim, bugname);
 			}
 			switch_core_session_rwunlock(lsession);
