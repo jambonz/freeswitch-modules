@@ -276,7 +276,7 @@ namespace {
         if (tech_pvt) {
           switch (event) {
             case deepgram::AudioPipe::CONNECT_SUCCESS:
-              switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "connection successful\n");
+              switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "connection (%s) successful\n", tech_pvt->bugname);
               tech_pvt->responseHandler(session, TRANSCRIBE_EVENT_CONNECT_SUCCESS, NULL, tech_pvt->bugname, finished);
             break;
             case deepgram::AudioPipe::CONNECT_FAIL:
@@ -286,19 +286,19 @@ namespace {
               json << "{\"reason\":\"" << message << "\"}";
               tech_pvt->pAudioPipe = nullptr;
               tech_pvt->responseHandler(session, TRANSCRIBE_EVENT_CONNECT_FAIL, (char *) json.str().c_str(), tech_pvt->bugname, finished);
-              switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_NOTICE, "connection failed: %s\n", message);
+              switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_NOTICE, "connection (%s) failed: %s\n", message, tech_pvt->bugname);
             }
             break;
             case deepgram::AudioPipe::CONNECTION_DROPPED:
               // first thing: we can no longer access the AudioPipe
               tech_pvt->pAudioPipe = nullptr;
               tech_pvt->responseHandler(session, TRANSCRIBE_EVENT_DISCONNECT, NULL, tech_pvt->bugname, finished);
-              switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connection dropped from far end\n");
+              switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connection (%s) dropped from far end\n", tech_pvt->bugname);
             break;
             case deepgram::AudioPipe::CONNECTION_CLOSED_GRACEFULLY:
               // first thing: we can no longer access the AudioPipe
               tech_pvt->pAudioPipe = nullptr;
-              switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connection closed gracefully\n");
+              switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connection (%s) closed gracefully\n", tech_pvt->bugname);
             break;
             case deepgram::AudioPipe::MESSAGE:
               if( strstr(message, emptyTranscript)) {
@@ -306,7 +306,7 @@ namespace {
               }
               else {
                 tech_pvt->responseHandler(session, TRANSCRIBE_EVENT_RESULTS, message, tech_pvt->bugname, finished);
-                switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "deepgram message: %s\n", message);
+                switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "deepgram message (%s): %s\n", tech_pvt->bugname, message);
               }
             break;
 

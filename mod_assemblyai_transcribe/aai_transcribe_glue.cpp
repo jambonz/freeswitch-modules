@@ -102,11 +102,12 @@ namespace {
     return path;
   }
 
-  static void eventCallback(const char* sessionId, assemblyai::AudioPipe::NotifyEvent_t event, const char* message, bool finished) {
+  static void eventCallback(const char* sessionId, const char* bugname, 
+    assemblyai::AudioPipe::NotifyEvent_t event, const char* message, bool finished) {
     switch_core_session_t* session = switch_core_session_locate(sessionId);
     if (session) {
       switch_channel_t *channel = switch_core_session_get_channel(session);
-      switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, MY_BUG_NAME);
+      switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, bugname);
       if (bug) {
         private_t* tech_pvt = (private_t*) switch_core_media_bug_get_user_data(bug);
         if (tech_pvt) {
@@ -194,7 +195,8 @@ namespace {
     tech_pvt->channels = channels;
     tech_pvt->id = ++idxCallCount;
     tech_pvt->buffer_overrun_notified = 0;
-    
+    strncpy(tech_pvt->bugname, bugname, MAX_BUG_LEN);
+
     size_t buflen = LWS_PRE + (FRAME_SIZE_8000 * desiredSampling / 8000 * channels * 1000 / RTP_PACKETIZATION_PERIOD * nAudioBufferSecs);
 
     const char* apiKey = switch_channel_get_variable(channel, "ASSEMBLYAI_API_KEY");
@@ -204,7 +206,7 @@ namespace {
       return SWITCH_STATUS_FALSE;
     }
 
-    assemblyai::AudioPipe* ap = new assemblyai::AudioPipe(tech_pvt->sessionId, tech_pvt->host, tech_pvt->port, tech_pvt->path, 
+    assemblyai::AudioPipe* ap = new assemblyai::AudioPipe(tech_pvt->sessionId, bugname, tech_pvt->host, tech_pvt->port, tech_pvt->path, 
       buflen, read_impl.decoded_bytes_per_packet, apiKey, eventCallback);
     if (!ap) {
       switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Error allocating AudioPipe\n");
@@ -251,7 +253,8 @@ extern "C" {
   switch_status_t aai_transcribe_init() {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "mod_assemblyai_transcribe: audio buffer (in secs):    %d secs\n", nAudioBufferSecs);
  
-    int logs = LLL_ERR | LLL_WARN | LLL_NOTICE || LLL_INFO | LLL_PARSER | LLL_HEADER | LLL_EXT | LLL_CLIENT  | LLL_LATENCY | LLL_DEBUG ;
+    int logs = LLL_ERR | LLL_WARN | LLL_NOTICE ;
+    //| LLL_INFO | LLL_PARSER | LLL_HEADER | LLL_EXT | LLL_CLIENT  | LLL_LATENCY | LLL_DEBUG ;
     
     assemblyai::AudioPipe::initialize(logs, lws_logger);
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "AudioPipe::initialize completed\n");
@@ -306,7 +309,7 @@ extern "C" {
 
 	switch_status_t aai_transcribe_session_stop(switch_core_session_t *session,int channelIsClosing, char* bugname) {
     switch_channel_t *channel = switch_core_session_get_channel(session);
-    switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, MY_BUG_NAME);
+    switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, bugname);
     if (!bug) {
       switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "aai_transcribe_session_stop: no bug - websocket conection already closed\n");
       return SWITCH_STATUS_FALSE;

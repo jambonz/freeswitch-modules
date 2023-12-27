@@ -56,7 +56,7 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
 	void *pUserData;
 	uint32_t samples_per_second;
 
-	if (switch_channel_get_private(channel, MY_BUG_NAME)) {
+	if (switch_channel_get_private(channel, bugname)) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "removing bug from previous transcribe\n");
 		do_stop(session, bugname);
 	}
@@ -76,7 +76,7 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
 	if ((status = switch_core_media_bug_add(session, "ibm_transcribe", NULL, capture_callback, pUserData, 0, flags, &bug)) != SWITCH_STATUS_SUCCESS) {
 		return status;
 	}
-  switch_channel_set_private(channel, MY_BUG_NAME, bug);
+  switch_channel_set_private(channel, bugname, bug);
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "added media bug for ibm transcribe\n");
 
 	return SWITCH_STATUS_SUCCESS;
@@ -87,7 +87,7 @@ static switch_status_t do_stop(switch_core_session_t *session,  char* bugname)
 	switch_status_t status = SWITCH_STATUS_SUCCESS;
 
 	switch_channel_t *channel = switch_core_session_get_channel(session);
-	switch_media_bug_t *bug = switch_channel_get_private(channel, MY_BUG_NAME);
+	switch_media_bug_t *bug = switch_channel_get_private(channel, bugname);
 
 	if (bug) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Received user command command to stop transcribe.\n");

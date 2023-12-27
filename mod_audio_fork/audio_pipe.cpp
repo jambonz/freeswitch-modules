@@ -7,6 +7,7 @@
 #define MAX_RECV_BUF_SIZE (65 * 1024 * 10)
 #define RECV_BUF_REALLOC_SIZE (8 * 1024)
 
+using namespace drachtio;
 
 namespace {
   static const char* basicAuthUser = std::getenv("MOD_AUDIO_FORK_HTTP_AUTH_USER");
@@ -267,6 +268,7 @@ static const lws_retry_bo_t retry = {
 };
 
 struct lws_context *AudioPipe::context = nullptr;
+std::thread AudioPipe::serviceThread;
 std::string AudioPipe::protocolName;
 std::mutex AudioPipe::mutex_connects;
 std::mutex AudioPipe::mutex_disconnects;
@@ -436,19 +438,21 @@ bool AudioPipe::lws_service_thread() {
 
 void AudioPipe::initialize(const char* protocol, int loglevel, log_emit_function logger) {
   protocolName = protocol;
-  lws_set_log_level(loglevel, logger);
+  //lws_set_log_level(loglevel, logger);
 
   lwsl_notice("AudioPipe::initialize starting\n"); 
   std::lock_guard<std::mutex> lock(mapMutex);
-  std::thread t(&AudioPipe::lws_service_thread);
   stopFlag = false;
-  t.detach();
+  serviceThread = std::thread(&AudioPipe::lws_service_thread);
 }
 
 bool AudioPipe::deinitialize() {
   lwsl_notice("AudioPipe::deinitialize\n"); 
   std::lock_guard<std::mutex> lock(mapMutex);
   stopFlag = true;
+  if (serviceThread.joinable()) {
+    serviceThread.join();
+  }
   return true;
 }
 
