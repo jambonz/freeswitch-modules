@@ -375,12 +375,16 @@ extern "C" {
     int logs = LLL_ERR | LLL_WARN | LLL_NOTICE ;
      //LLL_INFO | LLL_PARSER | LLL_HEADER | LLL_EXT | LLL_CLIENT  | LLL_LATENCY | LLL_DEBUG ;
     drachtio::AudioPipe::initialize(mySubProtocolName, logs, lws_logger);
-   return SWITCH_STATUS_SUCCESS;
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "mod_audio_fork successfully initialized\n");
+    return SWITCH_STATUS_SUCCESS;
   }
 
   switch_status_t fork_cleanup() {
     bool cleanup = false;
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "mod_audio_fork unloading..\n");
+
     cleanup = drachtio::AudioPipe::deinitialize();
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "mod_audio_fork unloaded status %d\n", cleanup);
     if (cleanup == true) {
         return SWITCH_STATUS_SUCCESS;
     }

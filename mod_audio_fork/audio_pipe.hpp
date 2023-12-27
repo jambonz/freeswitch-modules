@@ -91,6 +91,7 @@ namespace drachtio {
     void operator=(const AudioPipe&) = delete;
 
   private:
+    static std::thread serviceThread;
 
     static int lws_callback(struct lws *wsi, enum lws_callback_reasons reason, void *user, void *in, size_t len); 
     static struct lws_context *context;

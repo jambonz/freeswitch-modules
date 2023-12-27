@@ -255,6 +255,7 @@ static const lws_retry_bo_t retry = {
 };
 
 struct lws_context *AudioPipe::context = nullptr;
+std::thread AudioPipe::serviceThread;
 std::mutex AudioPipe::mutex_connects;
 std::mutex AudioPipe::mutex_disconnects;
 std::mutex AudioPipe::mutex_writes;
@@ -423,19 +424,22 @@ bool AudioPipe::lws_service_thread() {
 
 void AudioPipe::initialize(int loglevel, log_emit_function logger) {
 
-  lws_set_log_level(loglevel, logger);
+  //lws_set_log_level(loglevel, logger);
 
   lwsl_notice("AudioPipe::initialize starting\n"); 
   std::lock_guard<std::mutex> lock(mapMutex);
-  std::thread t(&deepgram::AudioPipe::lws_service_thread);
   stopFlag = false;
-  t.detach();
+  serviceThread = std::thread(&AudioPipe::lws_service_thread);
 }
 
 bool AudioPipe::deinitialize() {
   lwsl_notice("AudioPipe::deinitialize\n"); 
   std::lock_guard<std::mutex> lock(mapMutex);
   stopFlag = true;
+  if (serviceThread.joinable()) {
+    serviceThread.join();
+  }
+
   return true;
 }
 

@@ -256,7 +256,6 @@ namespace {
     switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "host: %s, port: %d, path: %s\n", host, port, path);
 
     strncpy(tech_pvt->sessionId, switch_core_session_get_uuid(session), MAX_SESSION_ID);
-    strncpy(tech_pvt->bugname, bugname, MAX_BUG_LEN);
     strncpy(tech_pvt->host, host, MAX_WS_URL_LEN);
     strncpy(tech_pvt->path, path, MAX_PATH_LEN); 
     tech_pvt->port = port;
@@ -268,6 +267,7 @@ namespace {
     tech_pvt->channels = channels;
     tech_pvt->id = ++idxCallCount;
     tech_pvt->buffer_overrun_notified = 0;
+    strncpy(tech_pvt->bugname, bugname, MAX_BUG_LEN);
     
     size_t buflen = LWS_PRE + (FRAME_SIZE_8000 * desiredSampling / 8000 * channels * 1000 / RTP_PACKETIZATION_PERIOD * nAudioBufferSecs);
 
@@ -325,7 +325,8 @@ extern "C" {
   switch_status_t jb_transcribe_init() {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "mod_jambonz_transcribe: audio buffer (in secs):    %d secs\n", nAudioBufferSecs);
  
-    int logs = LLL_ERR | LLL_WARN | LLL_NOTICE || LLL_INFO | LLL_PARSER | LLL_HEADER | LLL_EXT | LLL_CLIENT  | LLL_LATENCY | LLL_DEBUG ;
+    int logs = LLL_ERR | LLL_WARN | LLL_NOTICE ;
+    // | LLL_INFO | LLL_PARSER | LLL_HEADER | LLL_EXT | LLL_CLIENT  | LLL_LATENCY | LLL_DEBUG ;
     
     jambonz::AudioPipe::initialize(logs, lws_logger);
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "AudioPipe::initialize completed\n");
