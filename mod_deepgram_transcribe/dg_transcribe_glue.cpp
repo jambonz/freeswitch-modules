@@ -38,44 +38,47 @@ namespace {
       std::string model;
   };
 
-  static const std::unordered_map<std::string, LanguageInfo> languageLookupTable = {
-      {"zh", {"base", "general"}},
-      {"zh-CN", {"base", "general"}},
-      {"zh-TW", {"base", "general"}},
-      {"da", {"enhanced", "general"}},
-      {"en", {"nova", "phonecall"}},
-      {"en-US", {"nova", "phonecall"}},
-      {"en-AU", {"nova", "general"}},
-      {"en-GB", {"nova", "general"}},
-      {"en-IN", {"nova", "general"}},
-      {"en-NZ", {"nova", "general"}},
-      {"nl", {"enhanced", "general"}},
-      {"fr", {"enhanced", "general"}},
-      {"fr-CA", {"base", "general"}},
-      {"de", {"enhanced", "general"}},
-      {"hi", {"enhanced", "general"}},
-      {"hi-Latn", {"base", "general"}},
-      {"id", {"base", "general"}},
-      {"ja", {"enhanced", "general"}},
-      {"ko", {"enhanced", "general"}},
-      {"no", {"enhanced", "general"}},
-      {"pl", {"enhanced", "general"}},
-      {"pt", {"enhanced", "general"}},
-      {"pt-BR", {"enhanced", "general"}},
-      {"pt-PT", {"enhanced", "general"}},
-      {"ru", {"base", "general"}},
-      {"es", {"nova", "general"}},
-      {"es-419", {"nova", "general"}},
-      {"sv", {"enhanced", "general"}},
-      {"ta", {"enhanced", "general"}},
-      {"tr", {"base", "general"}},
-      {"uk", {"base", "general"}}
+  static const std::unordered_map<std::string, std::string> languageLookupTable = {
+      {"zh", "base"},
+      {"zh-CN", "base"},
+      {"zh-TW", "base"},
+      {"da", "enhanced"},
+      {"en", "nova-2"},
+      {"en-US", "nova-2"},
+      {"en-AU", "nova-2"},
+      {"en-GB", "nova-2"},
+      {"en-IN", "nova-2"},
+      {"en-NZ", "nova-2"},
+      {"nl", "nova-2"},
+      {"fr", "nova-2"},
+      {"fr-CA", "nova-2"},
+      {"de", "nova-2"},
+      {"hi", "nova-2"},
+      {"hi-Latn", "nova-2"},
+      {"id", "base"},
+      {"it", "enhanced"},
+      {"ja", "enhanced"},
+      {"ko", "enhanced"},
+      {"no", "enhanced"},
+      {"pl", "enhanced"},
+      {"pt","nova-2"},
+      {"pt-BR", "nova-2"},
+      {"pt-PT", "enhanced"},
+      {"ru", "base"},
+      {"es","nova-2"},
+      {"es-419","nova-2"},
+      {"es-LATAM","enhanced"},
+      {"sv", "enhanced"},
+      {"ta", "enhanced"},
+      {"taq", "enhanced"},
+      {"tr", "base"},
+      {"uk", "base"}
   };
 
-  static bool getLanguageInfo(const std::string& language, LanguageInfo& info) {
+  static bool getLanguageInfo(const std::string& language, std::string& model) {
       auto it = languageLookupTable.find(language);
       if (it != languageLookupTable.end()) {
-          info = it->second;
+          model = it->second;
           return true;
       }
       return false;
@@ -146,24 +149,21 @@ namespace {
     const char *customModel = switch_channel_get_variable(channel, "DEEPGRAM_SPEECH_CUSTOM_MODEL");
     const char *tier = switch_channel_get_variable(channel, "DEEPGRAM_SPEECH_TIER") ;
     std::ostringstream oss;
-    LanguageInfo info;
 
     oss << "/v1/listen?";
 
-    if (!tier && !model && !customModel) {
-      /* make best choice by language */
-      if (getLanguageInfo(language, info)) {
-        oss << "tier=" << info.tier << "&model=" << info.model;
+    /* make best choice by language if model not supplied*/
+    if (!model && !customModel) {
+      std::string defaultModel;
+      if (getLanguageInfo(language, defaultModel)) {
+        oss << "&model=" << defaultModel;
       }
       else {
-        oss << "tier=base&model=general"; // most widely supported, though not ideal
+        oss << "tier=base&model=base"; // most widely supported, though not ideal
       }
     }
-    else {
-      if (tier) oss << "tier=" << tier;
-      if (model) oss << "&model=" << model;
-      if (customModel) oss << "&model=" << customModel;
-    }
+    else if (model) oss << "&model=" << model;
+    else if (customModel) oss << "&model=" << customModel;
 
     if (var = switch_channel_get_variable(channel, "DEEPGRAM_SPEECH_MODEL_VERSION")) {
      oss <<  "&version";
