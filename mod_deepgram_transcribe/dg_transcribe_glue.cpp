@@ -84,7 +84,8 @@ namespace {
       return false;
   }
 
-  static const char* emptyTranscript = "{\"alternatives\":[{\"transcript\":\"\",\"confidence\":0.0,\"words\":[]}]}";
+  static const char* emptyTranscript = 
+    "\"is_final\":false,\"speech_final\":false,\"channel\":{\"alternatives\":[{\"transcript\":\"\",\"confidence\":0.0,\"words\":[]}]}";
 
   static void reaper(private_t *tech_pvt) {
     std::shared_ptr<deepgram::AudioPipe> pAp;
