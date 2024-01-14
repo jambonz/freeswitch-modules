@@ -63,7 +63,7 @@ namespace {
       {"pl", "enhanced"},
       {"pt","nova-2"},
       {"pt-BR", "nova-2"},
-      {"pt-PT", {"enhanced", "general"}},
+      {"pt-PT", "enhanced"},
       {"ru", "base"},
       {"es","nova-2"},
       {"es-419","nova-2"},
