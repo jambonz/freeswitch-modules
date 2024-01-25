@@ -53,6 +53,7 @@ typedef struct
   char error[CURL_ERROR_SIZE];
   FILE* file;
   std::chrono::time_point<std::chrono::high_resolution_clock> startTime;
+  bool flushed;
 } ConnInfo_t;
 
 /* static singletons shared by all sessions */
@@ -90,6 +91,7 @@ std::string secondsToMillisecondsString(double seconds) {
 }
 
 static void cleanupConn(ConnInfo_t *conn) {
+  auto el = conn->elevenlabs;
   //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "cleanupConn %p\n", conn);
 
   if( conn->hdr_list ) {
@@ -98,11 +100,16 @@ static void cleanupConn(ConnInfo_t *conn) {
   }
   curl_easy_cleanup(conn->easy);
 
-  //fclose(conn->file);
+  if (conn->file) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "closing audio cache file %s\n", el->cache_filename);
+    if (fclose(conn->file) != 0) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "cleanupConn: error closing audio cache file\n");
+    }
+    conn->file = nullptr ;
+  }
 
-  auto elevenlabs = conn->elevenlabs;
-  elevenlabs->conn = nullptr ;
-  elevenlabs->draining = 1;
+  el->conn = nullptr ;
+  el->draining = 1;
 
   memset(conn, 0, sizeof(ConnInfo_t));
   pool.destroy(conn) ;
@@ -398,11 +405,17 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
   size_t bytes_received = size * nmemb;
   auto el = conn->elevenlabs;
   CircularBuffer_t *cBuffer = (CircularBuffer_t *) el->circularBuffer;
-  std::vector<uint16_t> pcm_data = convert_ulaw_to_linear(data, bytes_received);
+  std::vector<uint16_t> pcm_data;
+  
+  if (conn->flushed) {
+    /* this will abort the transfer */
+    return 0;
+  }
+  pcm_data = convert_ulaw_to_linear(data, bytes_received);
 
   /* and write to the file */
   size_t bytesResampled = pcm_data.size() * sizeof(uint16_t);
-  //fwrite(pcm_data.data(), sizeof(uint16_t), pcm_data.size(), conn->file);
+  if (conn->file) fwrite(pcm_data.data(), sizeof(uint16_t), pcm_data.size(), conn->file);
   {
     switch_mutex_lock(el->mutex);
 
@@ -421,8 +434,8 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
       fireEvent = true;
 
       /* trime leading 50ms = 400 samples since on elevenlabs it is silence */
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "write_cb triming 400 samples (50ms) silence from start of buffer\n"); 
-      cBuffer->erase(cBuffer->begin(), cBuffer->begin() + 400);
+      //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "write_cb triming 400 samples (50ms) silence from start of buffer\n"); 
+      //cBuffer->erase(cBuffer->begin(), cBuffer->begin() + 400);
     }
     switch_mutex_unlock(el->mutex);
   }
@@ -442,31 +455,31 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
 
           switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Playback-File-Type", "tts_stream");
           if (el->reported_latency) {
-            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_elevenlabs_reported_latency_ms", el->reported_latency);
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_elevenlabs_reported_latency_ms", el->reported_latency);
           }
           if (el->request_id) {
-            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_elevenlabs_request_id", el->request_id);
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_elevenlabs_request_id", el->request_id);
           }
           if (el->history_item_id) {
-            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_elevenlabs_history_item_id", el->history_item_id);
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_elevenlabs_history_item_id", el->history_item_id);
           }
           if (el->name_lookup_time_ms) {
-            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_elevenlabs_name_lookup_time_ms", el->name_lookup_time_ms);
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_elevenlabs_name_lookup_time_ms", el->name_lookup_time_ms);
           }
           if (el->connect_time_ms) {
-            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_elevenlabs_connect_time_ms", el->connect_time_ms);
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_elevenlabs_connect_time_ms", el->connect_time_ms);
           }
           if (el->final_response_time_ms) {
-            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_elevenlabs_final_response_time_ms", el->final_response_time_ms);
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_elevenlabs_final_response_time_ms", el->final_response_time_ms);
           }
           if (el->voice_name) {
-            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_elevenlabs_voice_name", el->voice_name);
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_elevenlabs_voice_name", el->voice_name);
           }
           if (el->model_id) {
-            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_elevenlabs_model_id", el->model_id);
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_elevenlabs_model_id", el->model_id);
           }
           if (el->optimize_streaming_latency) {
-            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_elevenlabs_optimize_streaming_latency", el->optimize_streaming_latency);
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_elevenlabs_optimize_streaming_latency", el->optimize_streaming_latency);
           }
           switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_time_to_first_byte_ms", time_to_first_byte_ms.c_str());
           switch_event_fire(&event);
@@ -611,7 +624,7 @@ extern "C" {
 		return SWITCH_STATUS_SUCCESS;
 	}
 
-	switch_status_t elevenlabs_speech_feed_tts(elevenlabs_t* el, char* apiKey, char* text, switch_speech_flag_t *flags) {
+	switch_status_t elevenlabs_speech_feed_tts(elevenlabs_t* el, char* text, switch_speech_flag_t *flags) {
     CURLMcode rc;
     const int MAX_CHARS = 20;
     char tempText[MAX_CHARS + 4]; // +4 for the ellipsis and null terminator
@@ -679,8 +692,9 @@ extern "C" {
     conn->easy = easy;
     conn->global = &global;
     conn->hdr_list = NULL ;
-    //conn->file = el->file;
+    conn->file = el->file;
     conn->body = json;
+    conn->flushed = false;
 
     el->circularBuffer = (void *) new CircularBuffer_t(8192);
 
@@ -726,27 +740,32 @@ extern "C" {
 		return SWITCH_STATUS_SUCCESS;
 	}
 
-  switch_status_t elevenlabs_speech_read_tts(elevenlabs_t* elevenlabs, void *data, size_t *datalen, switch_speech_flag_t *flags) {
-    CircularBuffer_t *cBuffer = (CircularBuffer_t *) elevenlabs->circularBuffer;
+  switch_status_t elevenlabs_speech_read_tts(elevenlabs_t* el, void *data, size_t *datalen, switch_speech_flag_t *flags) {
+    CircularBuffer_t *cBuffer = (CircularBuffer_t *) el->circularBuffer;
     std::vector<uint16_t> pcm_data;
 
     {
-      switch_mutex_lock(elevenlabs->mutex);
-      if (cBuffer->empty()) { 
+      switch_mutex_lock(el->mutex);
+      ConnInfo_t *conn = (ConnInfo_t *) el->conn;
+      if (conn && conn->flushed) {
+        switch_mutex_unlock(el->mutex);
+        return SWITCH_STATUS_BREAK;
+      }
+      if (cBuffer->empty()) {
+        if (el->draining) {
+          switch_mutex_unlock(el->mutex);
+          return SWITCH_STATUS_BREAK;
+        }
         /* no audio available yet so send silence */
-         memset(data, 0, *datalen);
-        //*datalen = 0;
-        //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "elevenlabs_speech_read_tts - no data\n") ;
-        switch_mutex_unlock(elevenlabs->mutex);
-        return elevenlabs->draining ? SWITCH_STATUS_BREAK : SWITCH_STATUS_SUCCESS;
+         memset(data, 255, *datalen);
+        switch_mutex_unlock(el->mutex);
+        return SWITCH_STATUS_SUCCESS;
       }
       size_t size = std::min((*datalen/2), cBuffer->size());
       pcm_data.insert(pcm_data.end(), cBuffer->begin(), cBuffer->begin() + size);
       cBuffer->erase(cBuffer->begin(), cBuffer->begin() + size);
-      switch_mutex_unlock(elevenlabs->mutex);
+      switch_mutex_unlock(el->mutex);
     }
-    
-    //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "elevenlabs_speech_read_tts - returning %d samples\n", pcm_data.size()) ;
 
     memcpy(data, pcm_data.data(), pcm_data.size() * sizeof(uint16_t));
     *datalen = pcm_data.size() * sizeof(uint16_t);
@@ -755,12 +774,36 @@ extern "C" {
   }
 
   switch_status_t elevenlabs_speech_flush_tts(elevenlabs_t* el) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "elevenlabs_speech_flush_tts\n") ;
+    bool download_complete = el->response_code == 200;
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "elevenlabs_speech_flush_tts, download complete? %s\n", download_complete ? "yes" : "no") ;  
 
+    ConnInfo_t *conn = (ConnInfo_t *) el->conn;
     CircularBuffer_t *cBuffer = (CircularBuffer_t *) el->circularBuffer;
     delete cBuffer;
     el->circularBuffer = nullptr ;
 
+    if (conn) {
+      conn->flushed = true;
+      if (!download_complete) {
+        if (conn->file) {
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "closing audio cache file %s because download was interrupted\n", el->cache_filename);
+          if (fclose(conn->file) != 0) {
+            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "error closing audio cache file\n");
+          }
+          conn->file = nullptr ;
+        }
+
+        if (el->cache_filename) {
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "removing audio cache file %s because download was interrupted\n", el->cache_filename);
+          if (unlink(el->cache_filename) != 0) {
+            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "cleanupConn: error removing audio cache file %s: %d:%s\n", 
+              el->cache_filename, errno, strerror(errno));
+          }
+          free(el->cache_filename);
+          el->cache_filename = nullptr ;
+        }
+      }
+    }
     if (el->session_id) {
       switch_core_session_t* session = switch_core_session_locate(el->session_id);
       if (session) {
@@ -770,6 +813,17 @@ extern "C" {
           if (switch_event_create(&event, SWITCH_EVENT_PLAYBACK_STOP) == SWITCH_STATUS_SUCCESS) {
             switch_channel_event_set_data(channel, event);
             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Playback-File-Type", "tts_stream");
+            if (download_complete && el->cache_filename) {
+              std::string command = std::string("chmod a+rwx ") + el->cache_filename;
+              if (system(command.c_str()) != 0) {
+                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "elevenlabs_speech_flush_tts: error changing permissions on audio cache file %s\n", el->cache_filename);
+              }
+              switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_cache_filename", el->cache_filename);
+              switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "write_cb: firing playback-stopped, file %s\n", el->cache_filename);
+            }
+            else {
+              switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "write_cb: firing playback-stopped (no cache file)\n");
+            }
             switch_event_fire(&event);
           }
           else {
@@ -785,7 +839,7 @@ extern "C" {
     return SWITCH_STATUS_SUCCESS;
   }
 
-	switch_status_t elevenlabs_speech_close(elevenlabs_t* elevenlabs) {
+	switch_status_t elevenlabs_speech_close(elevenlabs_t* el) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "elevenlabs_speech_close\n") ;
 		return SWITCH_STATUS_SUCCESS;
 	}

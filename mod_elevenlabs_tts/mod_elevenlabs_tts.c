@@ -11,6 +11,7 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_elevenlabs_tts_shutdown);
 SWITCH_MODULE_DEFINITION(mod_elevenlabs_tts, mod_elevenlabs_tts_load, mod_elevenlabs_tts_shutdown, NULL);
 
 static void clearElevenlabs(elevenlabs_t* el, int freeAll) {
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "clearElevenlabs\n");
   if (el->api_key) free(el->api_key);
   if (el->model_id) free(el->model_id);
   if (el->similarity_boost) free(el->similarity_boost);
@@ -26,6 +27,7 @@ static void clearElevenlabs(elevenlabs_t* el, int freeAll) {
   if (el->name_lookup_time_ms) free(el->name_lookup_time_ms);
   if (el->connect_time_ms) free(el->connect_time_ms);
   if (el->final_response_time_ms) free(el->final_response_time_ms);
+  if (el->cache_filename) free(el->cache_filename);
   
   el->api_key = NULL;
   el->model_id = NULL;
@@ -42,6 +44,9 @@ static void clearElevenlabs(elevenlabs_t* el, int freeAll) {
   el->name_lookup_time_ms = NULL;
   el->connect_time_ms = NULL;
   el->final_response_time_ms = NULL;
+  el->cache_filename = NULL;
+
+  el->file = NULL;
 
   if (freeAll) {
     if (el->voice_name) free(el->voice_name);
@@ -51,15 +56,15 @@ static void clearElevenlabs(elevenlabs_t* el, int freeAll) {
   }
 }
 static elevenlabs_t * createOrRetrievePrivateData(switch_speech_handle_t *sh) {
-  elevenlabs_t *elevenlabs = (elevenlabs_t *) sh->private_info;  
-  if (!elevenlabs) {
-    elevenlabs = switch_core_alloc(sh->memory_pool, sizeof(*elevenlabs));
-  	sh->private_info = elevenlabs;
-    memset(elevenlabs, 0, sizeof(*elevenlabs));
-    switch_mutex_init(&elevenlabs->mutex, SWITCH_MUTEX_NESTED, sh->memory_pool);
+  elevenlabs_t *el = (elevenlabs_t *) sh->private_info;  
+  if (!el) {
+    el = switch_core_alloc(sh->memory_pool, sizeof(*el));
+  	sh->private_info = el;
+    memset(el, 0, sizeof(*el));
+    switch_mutex_init(&el->mutex, SWITCH_MUTEX_NESTED, sh->memory_pool);
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "allocated elevenlabs_t\n");
   }
-  return elevenlabs;
+  return el;
 }
 
 /**
@@ -71,24 +76,25 @@ static elevenlabs_t * createOrRetrievePrivateData(switch_speech_handle_t *sh) {
 static switch_status_t ell_speech_open(switch_speech_handle_t *sh, const char *voice_name, int rate, int channels, switch_speech_flag_t *flags)
 {
 
-  elevenlabs_t *elevenlabs = createOrRetrievePrivateData(sh);
-  elevenlabs->voice_name = strdup(voice_name);
-  elevenlabs->rate = rate;
+  elevenlabs_t *el = createOrRetrievePrivateData(sh);
+  el->voice_name = strdup(voice_name);
+  el->rate = rate;
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "ell_speech_open voice: %s, rate %d, channels %d\n", voice_name, rate, channels);
-	return elevenlabs_speech_open(elevenlabs);
+	return elevenlabs_speech_open(el);
 }
 
 static switch_status_t ell_speech_close(switch_speech_handle_t *sh, switch_speech_flag_t *flags)
 {
   switch_status_t rc;
-	elevenlabs_t *elevenlabs = (elevenlabs_t *) sh->private_info;
-	//assert(elevenlabs != NULL);
+	elevenlabs_t *el = (elevenlabs_t *) sh->private_info;
+	assert(el != NULL);
+  
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "ell_speech_close\n");
 
-  switch_mutex_destroy(elevenlabs->mutex);
+  switch_mutex_destroy(el->mutex);
 
-	rc = elevenlabs_speech_close(elevenlabs);
-  clearElevenlabs(elevenlabs, 1);
+	rc = elevenlabs_speech_close(el);
+  clearElevenlabs(el, 1);
   return rc;  
 }
 
@@ -97,24 +103,39 @@ static switch_status_t ell_speech_close(switch_speech_handle_t *sh, switch_speec
  */
 static switch_status_t ell_speech_feed_tts(switch_speech_handle_t *sh, char *text, switch_speech_flag_t *flags)
 {
-  char* apiKey = "a079b159403b8c7de3a022a46e272c07";
   switch_uuid_t uuid;
 	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
-	//char outfile[512] = "";
-  elevenlabs_t *elevenlabs = createOrRetrievePrivateData(sh);
-  elevenlabs->draining = 0;
-  elevenlabs->reads = 0;
+	char outfile[512] = "";
+  elevenlabs_t *el = createOrRetrievePrivateData(sh);
+  el->draining = 0;
+  el->reads = 0;
   
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "ell_speech_feed_tts\n");
   
 	/* Construct temporary file name with a new UUID */
 	switch_uuid_get(&uuid);
 	switch_uuid_format(uuid_str, &uuid);
-	//switch_snprintf(outfile, sizeof(outfile), "%s%s%s.tmp.r8", SWITCH_GLOBAL_dirs.temp_dir, SWITCH_PATH_SEPARATOR, uuid_str);
-  //elevenlabs->file = fopen(outfile, "wb");
+  if (el->cache_audio) {
+    int fd;
 
+    switch_snprintf(outfile, sizeof(outfile), "%s%s%s.r8", SWITCH_GLOBAL_dirs.temp_dir, SWITCH_PATH_SEPARATOR, uuid_str);
+    el->cache_filename = strdup(outfile);
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "writing audio cache file to %s\n", el->cache_filename);
 
-	return elevenlabs_speech_feed_tts(elevenlabs, apiKey, text, flags);
+    fd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+    if (fd == -1 ) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error opening cache file %s: %s\n", outfile, strerror(errno));
+    }
+    else {
+      el->file = fdopen(fd, "wb");
+      if (!el->file) {
+        close(fd);
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error opening cache file %s: %s\n", outfile, strerror(errno));
+      }
+    }
+  }
+
+	return elevenlabs_speech_feed_tts(el, text, flags);
 }
 
 /**
@@ -122,12 +143,12 @@ static switch_status_t ell_speech_feed_tts(switch_speech_handle_t *sh, char *tex
  */
 static void ell_speech_flush_tts(switch_speech_handle_t *sh)
 {
-	elevenlabs_t *elevenlabs = (elevenlabs_t *) sh->private_info;
-	//assert(elevenlabs != NULL);
+	elevenlabs_t *el = (elevenlabs_t *) sh->private_info;
+	//assert(el != NULL);
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "ell_speech_flush_tts\n");
-  elevenlabs_speech_flush_tts(elevenlabs);
+  elevenlabs_speech_flush_tts(el);
 
-  clearElevenlabs(elevenlabs, 0);
+  clearElevenlabs(el, 0);
 }
 
 /**
@@ -135,50 +156,53 @@ static void ell_speech_flush_tts(switch_speech_handle_t *sh)
  */
 static switch_status_t ell_speech_read_tts(switch_speech_handle_t *sh, void *data, size_t *datalen, switch_speech_flag_t *flags)
 {
-	elevenlabs_t *elevenlabs = (elevenlabs_t *) sh->private_info;
-  return elevenlabs_speech_read_tts(elevenlabs, data, datalen, flags);
+	elevenlabs_t *el = (elevenlabs_t *) sh->private_info;
+  return elevenlabs_speech_read_tts(el, data, datalen, flags);
 }
 
 static void ell_text_param_tts(switch_speech_handle_t *sh, char *param, const char *val)
 {
-  elevenlabs_t *elevenlabs = createOrRetrievePrivateData(sh);
+  elevenlabs_t *el = createOrRetrievePrivateData(sh);
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "ell_text_param_tts: %s=%s\n", param, val);
 
   if (0 == strcmp(param, "voice")) {
-    if (elevenlabs->voice_name) free(elevenlabs->voice_name);
-    elevenlabs->voice_name = strdup(val);
+    if (el->voice_name) free(el->voice_name);
+    el->voice_name = strdup(val);
   }
   else if (0 == strcmp(param, "api_key")) {
-    if (elevenlabs->api_key) free(elevenlabs->api_key);
-    elevenlabs->api_key = strdup(val);
+    if (el->api_key) free(el->api_key);
+    el->api_key = strdup(val);
   }
   else if (0 == strcmp(param, "model_id")) {
-    if (elevenlabs->model_id) free(elevenlabs->model_id);
-    elevenlabs->model_id = strdup(val);
+    if (el->model_id) free(el->model_id);
+    el->model_id = strdup(val);
   }
   else if (0 == strcmp(param, "similarity_boost")) {
-    if (elevenlabs->similarity_boost) free(elevenlabs->similarity_boost);
-    elevenlabs->similarity_boost = strdup(val);
+    if (el->similarity_boost) free(el->similarity_boost);
+    el->similarity_boost = strdup(val);
   }
   else if (0 == strcmp(param, "stability")) {
-    if (elevenlabs->stability) free(elevenlabs->stability);
-    elevenlabs->stability = strdup(val);
+    if (el->stability) free(el->stability);
+    el->stability = strdup(val);
   }
   else if (0 == strcmp(param, "style")) {
-    if (elevenlabs->style) free(elevenlabs->style);
-    elevenlabs->style = strdup(val);
+    if (el->style) free(el->style);
+    el->style = strdup(val);
   }
   else if (0 == strcmp(param, "use_speaker_boost")) {
-    if (elevenlabs->use_speaker_boost) free(elevenlabs->use_speaker_boost);
-    elevenlabs->use_speaker_boost = strdup(val);
+    if (el->use_speaker_boost) free(el->use_speaker_boost);
+    el->use_speaker_boost = strdup(val);
   }
   else if (0 == strcmp(param, "optimize_streaming_latency")) {
-    if (elevenlabs->optimize_streaming_latency) free(elevenlabs->optimize_streaming_latency);
-    elevenlabs->optimize_streaming_latency = strdup(val);
+    if (el->optimize_streaming_latency) free(el->optimize_streaming_latency);
+    el->optimize_streaming_latency = strdup(val);
+  }
+  else if (0 == strcmp(param, "write_cache_file") && switch_true(val)) {
+    el->cache_audio = 1;
   }
   else if (0 == strcmp(param, "session-uuid")) {
-    if (elevenlabs->session_id) free(elevenlabs->session_id);
-    elevenlabs->session_id = strdup(val);
+    if (el->session_id) free(el->session_id);
+    el->session_id = strdup(val);
   }
 }
 

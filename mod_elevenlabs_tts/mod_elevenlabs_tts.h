@@ -2,6 +2,9 @@
 #define __MOD_ELEVENLABS_TTS_H__
 
 #include <switch.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 struct elevenlabs_data {
   char *session_id;
@@ -24,6 +27,7 @@ struct elevenlabs_data {
   char *connect_time_ms;
   char *final_response_time_ms;
   char *err_msg;
+  char *cache_filename;
 
 	int rate;
 
@@ -33,6 +37,7 @@ struct elevenlabs_data {
   void *circularBuffer;
   int draining;
   int reads;
+  int cache_audio;
 };
 
 typedef struct elevenlabs_data elevenlabs_t;
