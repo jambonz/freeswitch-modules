@@ -10,6 +10,13 @@
 #include <fstream>
 #include <chrono>
 #include <string>
+#include <cstdlib>
+#include <sys/stat.h>
+#include <iostream>
+#include <cerrno>
+#include <dirent.h>
+#include <unistd.h>
+#include <sys/types.h>
 
 #include <boost/circular_buffer.hpp>
 #include <boost/thread.hpp>
@@ -31,6 +38,8 @@
 #define BUFFER_GROW_SIZE (8192)
 
 #include <sstream>
+
+//#define SWITCH_UUID_FORMATTED_LENGTH (256)
 
 typedef boost::circular_buffer<uint16_t> CircularBuffer_t;
 
@@ -65,7 +74,37 @@ static std::thread worker_thread ;
 
 /* statics */
 
+static std::string fullDirPath;
+
 static void timer_cb(const boost::system::error_code & error, GlobalInfo_t *g);
+
+static bool removeDirectory(const std::string &dirPath) {
+    DIR *dir = opendir(dirPath.c_str());
+    if (dir) {
+        struct dirent *entry;
+        while ((entry = readdir(dir)) != nullptr) {
+            std::string entryPath = dirPath + "/" + entry->d_name;
+            struct stat statbuf;
+            if (!stat(entryPath.c_str(), &statbuf)) {
+                if (S_ISDIR(statbuf.st_mode)) {
+                    if (std::string(entry->d_name) != "." && std::string(entry->d_name) != "..") {
+                        if (!removeDirectory(entryPath)) {
+                            closedir(dir);
+                            return false;
+                        }
+                    }
+                } else {
+                    if (unlink(entryPath.c_str()) != 0) {
+                        closedir(dir);
+                        return false;
+                    }
+                }
+            }
+        }
+        closedir(dir);
+    }
+    return rmdir(dirPath.c_str()) == 0;
+}
 
 static bool parseHeader(const std::string& str, std::string& header, std::string& value) {
     std::vector<std::string> parts;
@@ -481,6 +520,10 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
           if (el->optimize_streaming_latency) {
             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_elevenlabs_optimize_streaming_latency", el->optimize_streaming_latency);
           }
+          if (el->cache_filename) {
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_cache_filename", el->cache_filename);
+          }
+
           switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_time_to_first_byte_ms", time_to_first_byte_ms.c_str());
           switch_event_fire(&event);
         }
@@ -592,6 +635,33 @@ extern "C" {
     curl_multi_setopt(global.multi, CURLMOPT_TIMERDATA, &global);
     curl_multi_setopt(global.multi, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
 
+    /* create temp folder for cache files */
+      const char* baseDir = std::getenv("JAMBONZ_TMP_CACHE_FOLDER");
+      if (!baseDir) {
+        baseDir = "/var/";
+      }
+      if (strcmp(baseDir, "/") == 0) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "failed to create folder %s\n", baseDir);
+        return SWITCH_STATUS_FALSE;
+      }
+
+      fullDirPath = std::string(baseDir) + "jambonz-tts-cache-files";
+
+      // Create the directory with read, write, and execute permissions for everyone
+      mode_t oldMask = umask(0);
+      int result = mkdir(fullDirPath.c_str(), S_IRWXU | S_IRWXG | S_IRWXO);
+      umask(oldMask);
+      if (result != 0) {
+        if (errno != EEXIST) {
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "failed to create folder %s\n", fullDirPath.c_str());
+          fullDirPath = "";
+        }
+        else switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "folder %s already exists\n", fullDirPath.c_str());
+      }
+      else {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "created folder %s\n", fullDirPath.c_str());
+      }
+
     /* start worker thread that handles transfers*/
     std::thread t(threadFunc) ;
     worker_thread.swap( t ) ;
@@ -617,6 +687,15 @@ extern "C" {
     curl_multi_cleanup(global.multi);
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "elevenlabs_speech_unload: completed\n");
     
+    /* remove tmp folder */
+    if (!fullDirPath.empty()) {
+      if (removeDirectory(fullDirPath)) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "elevenlabs_speech_unload: removed folder %s\n", fullDirPath.c_str());
+      }
+      else {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "elevenlabs_speech_unload: failed to remove folder %s\n", fullDirPath.c_str());
+      }
+    }
 		return SWITCH_STATUS_SUCCESS;
 	}
 
@@ -634,6 +713,35 @@ extern "C" {
         strcpy(tempText + MAX_CHARS, "...");
     } else {
         strcpy(tempText, text);
+    }
+
+    /* open cache file */
+    if (el->cache_audio && fullDirPath.length() > 0) {
+      switch_uuid_t uuid;
+      char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
+      char outfile[512] = "";
+      int fd;
+
+      switch_uuid_get(&uuid);
+      switch_uuid_format(uuid_str, &uuid);
+
+      switch_snprintf(outfile, sizeof(outfile), "%s%s%s.r8", fullDirPath.c_str(), SWITCH_PATH_SEPARATOR, uuid_str);
+      el->cache_filename = strdup(outfile);
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "writing audio cache file to %s\n", el->cache_filename);
+
+      mode_t oldMask = umask(0);
+      fd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+      umask(oldMask);
+      if (fd == -1 ) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error opening cache file %s: %s\n", outfile, strerror(errno));
+      }
+      else {
+        el->file = fdopen(fd, "wb");
+        if (!el->file) {
+          close(fd);
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error opening cache file %s: %s\n", outfile, strerror(errno));
+        }
+      }
     }
 
     //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "elevenlabs_speech_feed_tts: text %s\n", text);
@@ -813,16 +921,8 @@ extern "C" {
           if (switch_event_create(&event, SWITCH_EVENT_PLAYBACK_STOP) == SWITCH_STATUS_SUCCESS) {
             switch_channel_event_set_data(channel, event);
             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Playback-File-Type", "tts_stream");
-            if (download_complete && el->cache_filename) {
-              std::string command = std::string("chmod a+rwx ") + el->cache_filename;
-              if (system(command.c_str()) != 0) {
-                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "elevenlabs_speech_flush_tts: error changing permissions on audio cache file %s\n", el->cache_filename);
-              }
-              switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_cache_filename", el->cache_filename);
-              switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "write_cb: firing playback-stopped, file %s\n", el->cache_filename);
-            }
-            else {
-              switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "write_cb: firing playback-stopped (no cache file)\n");
+              if (el->cache_filename) {
+                switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_cache_filename", el->cache_filename);
             }
             switch_event_fire(&event);
           }

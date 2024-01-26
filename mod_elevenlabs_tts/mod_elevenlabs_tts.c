@@ -103,38 +103,12 @@ static switch_status_t ell_speech_close(switch_speech_handle_t *sh, switch_speec
  */
 static switch_status_t ell_speech_feed_tts(switch_speech_handle_t *sh, char *text, switch_speech_flag_t *flags)
 {
-  switch_uuid_t uuid;
-	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
-	char outfile[512] = "";
   elevenlabs_t *el = createOrRetrievePrivateData(sh);
   el->draining = 0;
   el->reads = 0;
   
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "ell_speech_feed_tts\n");
   
-	/* Construct temporary file name with a new UUID */
-	switch_uuid_get(&uuid);
-	switch_uuid_format(uuid_str, &uuid);
-  if (el->cache_audio) {
-    int fd;
-
-    switch_snprintf(outfile, sizeof(outfile), "%s%s%s.r8", SWITCH_GLOBAL_dirs.temp_dir, SWITCH_PATH_SEPARATOR, uuid_str);
-    el->cache_filename = strdup(outfile);
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "writing audio cache file to %s\n", el->cache_filename);
-
-    fd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
-    if (fd == -1 ) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error opening cache file %s: %s\n", outfile, strerror(errno));
-    }
-    else {
-      el->file = fdopen(fd, "wb");
-      if (!el->file) {
-        close(fd);
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error opening cache file %s: %s\n", outfile, strerror(errno));
-      }
-    }
-  }
-
 	return elevenlabs_speech_feed_tts(el, text, flags);
 }
 
