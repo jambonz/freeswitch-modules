@@ -131,7 +131,6 @@ std::string secondsToMillisecondsString(double seconds) {
 
 static void cleanupConn(ConnInfo_t *conn) {
   auto el = conn->elevenlabs;
-  //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "cleanupConn %p\n", conn);
 
   if( conn->hdr_list ) {
     curl_slist_free_all(conn->hdr_list);
@@ -140,7 +139,6 @@ static void cleanupConn(ConnInfo_t *conn) {
   curl_easy_cleanup(conn->easy);
 
   if (conn->file) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "closing audio cache file %s\n", el->cache_filename);
     if (fclose(conn->file) != 0) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "cleanupConn: error closing audio cache file\n");
     }
@@ -155,8 +153,6 @@ static void cleanupConn(ConnInfo_t *conn) {
 }
 
 int multi_timer_cb(CURLM *multi, long timeout_ms, GlobalInfo_t *g) {
-
-  //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "multi_timer_cb timeout_ms %ld\n", timeout_ms);
 
   /* cancel running timer */
   timer.cancel();
@@ -261,18 +257,19 @@ void check_multi_info(GlobalInfo_t *g) {
       el->response_code = response_code;
       if (ct) el->ct = strdup(ct);
 
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "response code: %ld, content-type %s\n", response_code, ct);
-      /*
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
-        "name lookup time: %"  CURL_FORMAT_CURL_OFF_T ".%06ld\n", (long)(namelookup), (long)(fmod(namelookup, 1.0) * 1000000));
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
-        "connect time: %"  CURL_FORMAT_CURL_OFF_T ".%06ld\n", (long)(connect), (long)(fmod(connect, 1.0) * 1000000));
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
-        "final response time %"  CURL_FORMAT_CURL_OFF_T ".%06ld\n", (long)(total), (long)(fmod(total, 1.0) * 1000000));
-      */
       std::string name_lookup_ms = secondsToMillisecondsString(namelookup);
       std::string connect_ms = secondsToMillisecondsString(connect);
       std::string final_response_time_ms = secondsToMillisecondsString(total);
+
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
+        "mod_elevenlabs_tts: response: %ld, content-type %s,"
+        "dns(ms): %"  CURL_FORMAT_CURL_OFF_T ".%06ld, "
+        "connect(ms): %"  CURL_FORMAT_CURL_OFF_T ".%06ld, "
+        "total(ms): %"  CURL_FORMAT_CURL_OFF_T ".%06ld\n",
+        response_code, ct,
+        (long)(namelookup), (long)(fmod(namelookup, 1.0) * 1000000),
+        (long)(connect), (long)(fmod(connect, 1.0) * 1000000),
+        (long)(total), (long)(fmod(total, 1.0) * 1000000));
 
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "name lookup time: %s\n", name_lookup_ms.c_str());
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "connect time: %s\n", connect_ms.c_str());
@@ -562,6 +559,7 @@ static size_t header_callback(char *buffer, size_t size, size_t nitems, ConnInfo
 static curl_socket_t opensocket(void *clientp, curlsocktype purpose, struct curl_sockaddr *address) {
   curl_socket_t sockfd = CURL_SOCKET_BAD;
 
+  //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "opensocket: %d\n", purpose);
   /* restrict to IPv4 */
   if(purpose == CURLSOCKTYPE_IPCXN && address->family == AF_INET) {
     /* create a tcp socket object */
@@ -599,8 +597,11 @@ static int close_socket(void *clientp, curl_socket_t item) {
 
 static void threadFunc() {      
   /* to make sure the event loop doesn't terminate when there is no work to do */
+  io_service.reset() ;
   boost::asio::io_service::work work(io_service);
   
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "mod_elevenlabs_tts threadFunc - starting\n");
+
   for(;;) {
       
     try {
@@ -608,10 +609,10 @@ static void threadFunc() {
       break ;
     }
     catch( std::exception& e) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "threadFunc - Error: %s\n", e.what());
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "mod_elevenlabs_tts threadFunc - Error: %s\n", e.what());
     }
   }
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "threadFunc - ending\n");
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "mod_elevenlabs_tts threadFunc - ending\n");
 }
 
 /* C api bindings */
@@ -687,7 +688,6 @@ extern "C" {
     curl_multi_cleanup(global.multi);
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "elevenlabs_speech_unload: completed\n");
     
-    /* remove tmp folder */
     if (!fullDirPath.empty()) {
       if (removeDirectory(fullDirPath)) {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "elevenlabs_speech_unload: removed folder %s\n", fullDirPath.c_str());
@@ -814,7 +814,7 @@ extern "C" {
     curl_easy_setopt(easy, CURLOPT_WRITEDATA, conn);
     curl_easy_setopt(easy, CURLOPT_ERRORBUFFER, conn->error);
     curl_easy_setopt(easy, CURLOPT_PRIVATE, conn);
-    curl_easy_setopt(easy, CURLOPT_VERBOSE, 1L);
+    curl_easy_setopt(easy, CURLOPT_VERBOSE, 0L);
     curl_easy_setopt(easy, CURLOPT_NOPROGRESS, 1L);
     curl_easy_setopt(easy, CURLOPT_HEADERFUNCTION, header_callback);
     curl_easy_setopt(easy, CURLOPT_HEADERDATA, conn);
@@ -839,6 +839,8 @@ extern "C" {
 
     /* start a timer to measure the duration until we receive first byte of audio */
     conn->startTime = std::chrono::high_resolution_clock::now();
+
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "elevenlabs_speech_feed_tts: called curl_multi_add_handle\n");
 
     /* note that the add_handle() will set a time-out to trigger very soon so
        that the necessary socket_action() call will be called by this app */
