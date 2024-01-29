@@ -447,13 +447,22 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
     /* this will abort the transfer */
     return 0;
   }
-  pcm_data = convert_ulaw_to_linear(data, bytes_received);
-
-  /* and write to the file */
-  size_t bytesResampled = pcm_data.size() * sizeof(uint16_t);
-  if (conn->file) fwrite(pcm_data.data(), sizeof(uint16_t), pcm_data.size(), conn->file);
   {
     switch_mutex_lock(el->mutex);
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "write_cb: received data, response %ld\n", 
+      el->response_code);
+
+    if (el->response_code > 0 && el->response_code != 200) {
+      std::string body((char *) ptr, bytes_received);
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "write_cb: received body %s\n", body.c_str());
+      switch_mutex_unlock(el->mutex);
+      return 0;
+    }
+    pcm_data = convert_ulaw_to_linear(data, bytes_received);
+
+    /* and write to the file */
+    size_t bytesResampled = pcm_data.size() * sizeof(uint16_t);
+    if (conn->file) fwrite(pcm_data.data(), sizeof(uint16_t), pcm_data.size(), conn->file);
 
     // Resize the buffer if necessary
     if (cBuffer->capacity() - cBuffer->size() < (bytesResampled / sizeof(uint16_t))) {
@@ -542,16 +551,27 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
 
 static size_t header_callback(char *buffer, size_t size, size_t nitems, ConnInfo_t *conn) {
   size_t bytes_received = size * nitems;
+  const std::string prefix = "HTTP/2 ";
+  elevenlabs_t* el = conn->elevenlabs;
   std::string header, value;
   std::string input(buffer, bytes_received);
   if (parseHeader(input, header, value)) {
-    elevenlabs_t* el = conn->elevenlabs;
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "recv header: %s with value %s\n", header.c_str(), value.c_str());
     if (0 == header.compare("tts-latency-ms")) el->reported_latency = strdup(value.c_str());
     else if (0 == header.compare("request-id")) el->request_id = strdup(value.c_str());
     else if (0 == header.compare("history-item-id")) el->history_item_id = strdup(value.c_str());
   }
-  else switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "recv header: %s\n", input.c_str());
+  else {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "recv header: %s\n", input.c_str());
+    if (input.rfind(prefix, 0) == 0) {
+      try {
+        el->response_code = std::stoi(input.substr(prefix.length()));
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "parsed response code: %ld\n", el->response_code);
+      } catch (const std::invalid_argument& e) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "header_callback: invalid response code %s\n", input.substr(prefix.length()).c_str());
+      }
+    }
+  }
   return bytes_received;
 }
 
@@ -637,31 +657,31 @@ extern "C" {
     curl_multi_setopt(global.multi, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
 
     /* create temp folder for cache files */
-      const char* baseDir = std::getenv("JAMBONZ_TMP_CACHE_FOLDER");
-      if (!baseDir) {
-        baseDir = "/var/";
-      }
-      if (strcmp(baseDir, "/") == 0) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "failed to create folder %s\n", baseDir);
-        return SWITCH_STATUS_FALSE;
-      }
+    const char* baseDir = std::getenv("JAMBONZ_TMP_CACHE_FOLDER");
+    if (!baseDir) {
+      baseDir = "/var/";
+    }
+    if (strcmp(baseDir, "/") == 0) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "failed to create folder %s\n", baseDir);
+      return SWITCH_STATUS_FALSE;
+    }
 
-      fullDirPath = std::string(baseDir) + "jambonz-tts-cache-files";
+    fullDirPath = std::string(baseDir) + "jambonz-tts-cache-files";
 
-      // Create the directory with read, write, and execute permissions for everyone
-      mode_t oldMask = umask(0);
-      int result = mkdir(fullDirPath.c_str(), S_IRWXU | S_IRWXG | S_IRWXO);
-      umask(oldMask);
-      if (result != 0) {
-        if (errno != EEXIST) {
-          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "failed to create folder %s\n", fullDirPath.c_str());
-          fullDirPath = "";
-        }
-        else switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "folder %s already exists\n", fullDirPath.c_str());
+    // Create the directory with read, write, and execute permissions for everyone
+    mode_t oldMask = umask(0);
+    int result = mkdir(fullDirPath.c_str(), S_IRWXU | S_IRWXG | S_IRWXO);
+    umask(oldMask);
+    if (result != 0) {
+      if (errno != EEXIST) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "failed to create folder %s\n", fullDirPath.c_str());
+        fullDirPath = "";
       }
-      else {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "created folder %s\n", fullDirPath.c_str());
-      }
+      else switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "folder %s already exists\n", fullDirPath.c_str());
+    }
+    else {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "created folder %s\n", fullDirPath.c_str());
+    }
 
     /* start worker thread that handles transfers*/
     std::thread t(threadFunc) ;
@@ -696,6 +716,7 @@ extern "C" {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "elevenlabs_speech_unload: failed to remove folder %s\n", fullDirPath.c_str());
       }
     }
+
 		return SWITCH_STATUS_SUCCESS;
 	}
 
@@ -857,6 +878,12 @@ extern "C" {
     {
       switch_mutex_lock(el->mutex);
       ConnInfo_t *conn = (ConnInfo_t *) el->conn;
+
+      if (el->response_code > 0 && el->response_code != 200) {
+        switch_mutex_unlock(el->mutex);
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "elevenlabs_speech_read_tts, returning failure\n") ;  
+        return SWITCH_STATUS_FALSE;
+      }
       if (conn && conn->flushed) {
         switch_mutex_unlock(el->mutex);
         return SWITCH_STATUS_BREAK;
@@ -867,7 +894,7 @@ extern "C" {
           return SWITCH_STATUS_BREAK;
         }
         /* no audio available yet so send silence */
-         memset(data, 255, *datalen);
+        memset(data, 255, *datalen);
         switch_mutex_unlock(el->mutex);
         return SWITCH_STATUS_SUCCESS;
       }
@@ -923,7 +950,8 @@ extern "C" {
           if (switch_event_create(&event, SWITCH_EVENT_PLAYBACK_STOP) == SWITCH_STATUS_SUCCESS) {
             switch_channel_event_set_data(channel, event);
             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Playback-File-Type", "tts_stream");
-              if (el->cache_filename) {
+              switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_elevenlabs_response_code", std::to_string(el->response_code).c_str());
+              if (el->cache_filename && el->response_code == 200) {
                 switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_cache_filename", el->cache_filename);
             }
             switch_event_fire(&event);
