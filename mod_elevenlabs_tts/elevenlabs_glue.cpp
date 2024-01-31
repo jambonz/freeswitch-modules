@@ -455,6 +455,7 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
     if (el->response_code > 0 && el->response_code != 200) {
       std::string body((char *) ptr, bytes_received);
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "write_cb: received body %s\n", body.c_str());
+      el->err_msg = strdup(body.c_str());
       switch_mutex_unlock(el->mutex);
       return 0;
     }
@@ -950,9 +951,12 @@ extern "C" {
           if (switch_event_create(&event, SWITCH_EVENT_PLAYBACK_STOP) == SWITCH_STATUS_SUCCESS) {
             switch_channel_event_set_data(channel, event);
             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Playback-File-Type", "tts_stream");
-              switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_elevenlabs_response_code", std::to_string(el->response_code).c_str());
-              if (el->cache_filename && el->response_code == 200) {
-                switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_cache_filename", el->cache_filename);
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_elevenlabs_response_code", std::to_string(el->response_code).c_str());
+            if (el->cache_filename && el->response_code == 200) {
+              switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_cache_filename", el->cache_filename);
+            }
+            if (el->response_code != 200 && el->err_msg) {
+              switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_error", el->err_msg);
             }
             switch_event_fire(&event);
           }

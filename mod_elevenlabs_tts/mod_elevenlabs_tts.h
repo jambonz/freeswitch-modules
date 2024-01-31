@@ -6,8 +6,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#define JAMBONZ_TTS_EVENT_ERROR      "elevenlabs_tts::error"
-
 struct elevenlabs_data {
   char *session_id;
 	char *voice_name;
