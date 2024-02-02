@@ -16,7 +16,10 @@
 #include <boost/assign/list_of.hpp>
 #include <boost/algorithm/string.hpp>
 
+#include "mpg123.h"
+
 #define BUFFER_GROW_SIZE (8192)
+#define MP3_DCACHE 8192 * 2
 
 typedef boost::circular_buffer<uint16_t> CircularBuffer_t;
 /* Global information, common to all connections */
@@ -35,6 +38,7 @@ typedef struct
   char* body;
   struct curl_slist *hdr_list;
   GlobalInfo_t *global;
+  mpg123_handle *mh;
   char error[CURL_ERROR_SIZE];
   FILE* file;
   std::chrono::time_point<std::chrono::high_resolution_clock> startTime;
@@ -79,6 +83,11 @@ static CURL* createEasyHandle(void) {
 
 static void cleanupConn(ConnInfo_t *conn) {
   auto w = conn->whisper;
+
+  if (conn->mh) {
+    mpg123_close(conn->mh);
+    mpg123_delete(conn->mh);
+  }
 
   if( conn->hdr_list ) {
     curl_slist_free_all(conn->hdr_list);
@@ -371,6 +380,52 @@ int multi_timer_cb(CURLM *multi, long timeout_ms, GlobalInfo_t *g) {
   return 0;
 }
 
+static std::vector<uint16_t> convert_mp3_to_linear(ConnInfo_t *conn, uint8_t *data, size_t len) {
+  std::vector<uint16_t> linear_data;
+  int decode_status = 0;
+  int eof = 0;
+  int mp3err = 0;
+  unsigned char decode_buf[MP3_DCACHE];
+
+  if(mpg123_feed(conn->mh, data, len) == MPG123_OK) {
+    while(!eof) {
+      size_t usedlen = 0;
+
+      decode_status = mpg123_read(conn->mh, decode_buf, sizeof(decode_buf), &usedlen);
+
+      switch(decode_status) {
+        case MPG123_NEW_FORMAT:
+          continue;
+
+        case MPG123_OK:
+          for(size_t i = 0; i < usedlen; i += 2) {
+            uint16_t value = decode_buf[i] | (decode_buf[i + 1] << 8);
+            linear_data.push_back(value);
+          }
+          break;
+
+        case MPG123_DONE:
+        case MPG123_NEED_MORE:
+          eof = 1;
+          break;
+
+        case MPG123_ERR:
+        default:
+          if(++mp3err >= 5) {
+            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Decoder Error!\n");
+            eof = 1;
+          }
+      }
+
+      if (eof)
+        break;
+
+      mp3err = 0;
+    }
+  }
+
+  return linear_data;
+}
 /* CURLOPT_WRITEFUNCTION */
 static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
   bool fireEvent = false;
@@ -396,7 +451,7 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
       switch_mutex_unlock(w->mutex);
       return 0;
     }
-    // pcm_data = convert_ulaw_to_linear(data, bytes_received);
+    pcm_data = convert_mp3_to_linear(conn, data, bytes_received);
 
     /* and write to the file */
     size_t bytesResampled = pcm_data.size() * sizeof(uint16_t);
@@ -699,7 +754,7 @@ extern "C" {
     cJSON_AddStringToObject(jResult, "model", w->model_id);
     cJSON_AddStringToObject(jResult, "input", text);
     cJSON_AddStringToObject(jResult, "voice", w->voice_name);
-    cJSON_AddStringToObject(jResult, "response_format", "opus");
+    cJSON_AddStringToObject(jResult, "response_format", "mp3");
     if (w->speed) {
       cJSON_AddStringToObject(jResult, "speed", w->speed);
     }
@@ -711,16 +766,29 @@ extern "C" {
 
     ConnInfo_t *conn = pool.malloc() ;
 
-    CURL* easy = createEasyHandle();
+    int mhError = 0;
+    mpg123_handle *mh = mpg123_new("auto", &mhError);
+    if (!mh) {
+      const char *mhErr = mpg123_plain_strerror(mhError);
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error allocating mpg123 handle! %s\n", switch_str_nil(mhErr));
+      return SWITCH_STATUS_FALSE;
+    }
 
+    if (mpg123_open_feed(mh) != MPG123_OK) {
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error mpg123_open_feed!\n");
+      return SWITCH_STATUS_FALSE;
+		}
+
+    CURL* easy = createEasyHandle();
     w->conn = (void *) conn ;
     conn->whisper = w;
     conn->easy = easy;
+    conn->mh = mh;
     conn->global = &global;
     conn->hdr_list = NULL ;
     conn->file = w->file;
     conn->body = json;
-    conn->flushed = false;
+    conn->flushed = false; 
 
     w->circularBuffer = (void *) new CircularBuffer_t(8192);
 
