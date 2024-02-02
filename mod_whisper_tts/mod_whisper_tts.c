@@ -3,7 +3,7 @@
 
 SWITCH_MODULE_LOAD_FUNCTION(mod_whisper_tts_load);
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_whisper_tts_shutdown);
-SWITCH_MODULE_DEFINITION(mod_whisper_tts_load, mod_whisper_tts_load, mod_whisper_tts_shutdown, NULL);
+SWITCH_MODULE_DEFINITION(mod_whisper_tts, mod_whisper_tts_load, mod_whisper_tts_shutdown, NULL);
 
 static void clearWhisper(whisper_t* w, int freeAll) {
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "clearWhisper\n");

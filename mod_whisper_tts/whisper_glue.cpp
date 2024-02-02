@@ -832,7 +832,7 @@ extern "C" {
     return SWITCH_STATUS_SUCCESS;
   }
 
-  switch_status_t elevenlabs_speech_read_tts(whisper_t* w, void *data, size_t *datalen, switch_speech_flag_t *flags) {
+  switch_status_t whisper_speech_read_tts(whisper_t* w, void *data, size_t *datalen, switch_speech_flag_t *flags) {
     CircularBuffer_t *cBuffer = (CircularBuffer_t *) w->circularBuffer;
     std::vector<uint16_t> pcm_data;
 
