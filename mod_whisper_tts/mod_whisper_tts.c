@@ -110,6 +110,8 @@ static void w_text_param_tts(switch_speech_handle_t *sh, char *param, const char
   } else if (0 == strcmp(param, "session-uuid")) {
     if (w->session_id) free(w->session_id);
     w->session_id = strdup(val);
+  } else if (0 == strcmp(param, "write_cache_file") && switch_true(val)) {
+    w->cache_audio = 1;
   }
 }
 static void w_numeric_param_tts(switch_speech_handle_t *sh, char *param, int val)
