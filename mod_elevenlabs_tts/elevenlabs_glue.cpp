@@ -709,6 +709,7 @@ extern "C" {
     curl_multi_cleanup(global.multi);
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "elevenlabs_speech_unload: completed\n");
     
+    /*
     if (!fullDirPath.empty()) {
       if (removeDirectory(fullDirPath)) {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "elevenlabs_speech_unload: removed folder %s\n", fullDirPath.c_str());
@@ -717,6 +718,7 @@ extern "C" {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "elevenlabs_speech_unload: failed to remove folder %s\n", fullDirPath.c_str());
       }
     }
+    */
 
 		return SWITCH_STATUS_SUCCESS;
 	}
