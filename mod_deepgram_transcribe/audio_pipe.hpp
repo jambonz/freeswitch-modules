@@ -45,7 +45,7 @@ namespace deepgram {
 
     // constructor
     AudioPipe(const char* uuid, const char* bugname, const char* host, unsigned int port, const char* path, 
-      size_t bufLen, size_t minFreespace, const char* apiKey, notifyHandler_t callback);
+      size_t bufLen, size_t minFreespace, const char* apiKey, int useTls, notifyHandler_t callback);
     ~AudioPipe();  
 
     LwsState_t getLwsState(void) { return m_state; }
@@ -137,6 +137,7 @@ namespace deepgram {
     bool m_finished;
     std::string m_bugname;
     std::promise<void> m_promise;
+    bool m_useTls;
   };
 
 } // namespace deepgram

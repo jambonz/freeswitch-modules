@@ -325,6 +325,7 @@ namespace {
     char* bugname, responseHandler_t responseHandler) {
 
     int err;
+    int useTls = true;
     switch_codec_implementation_t read_impl;
     switch_channel_t *channel = switch_core_session_get_channel(session);
 
@@ -337,8 +338,32 @@ namespace {
     switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "path: %s\n", path.c_str());
 
     strncpy(tech_pvt->sessionId, switch_core_session_get_uuid(session), MAX_SESSION_ID);
-    strncpy(tech_pvt->host, "api.deepgram.com", MAX_WS_URL_LEN);
-    tech_pvt->port = 443;
+
+    const char* endpoint = switch_channel_get_variable(channel, "DEEPGRAM_URI");
+    if (endpoint != nullptr) {
+      std::string ep(endpoint);
+
+      useTls = switch_true(switch_channel_get_variable(channel, "DEEPGRAM_USE_TLS"));
+      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connecting to deepgram on-prem %s, tls? %d\n", ep.c_str(), useTls);
+
+      size_t pos = ep.find(':');
+      if (pos != std::string::npos) {
+        std::string host = ep.substr(0, pos);
+        std::string port = ep.substr(pos + 1);
+        strncpy(tech_pvt->host, host.c_str(), MAX_WS_URL_LEN);
+        tech_pvt->port = ::atoi(port.c_str());
+      }
+      else {
+        strncpy(tech_pvt->host, ep.c_str(), MAX_WS_URL_LEN);
+        tech_pvt->port = 443;
+      }
+      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connecting to deepgram on-prem %s port %d\n", tech_pvt->host, tech_pvt->port);
+    }
+    else {
+      strncpy(tech_pvt->host, "api.deepgram.com", MAX_WS_URL_LEN);
+      tech_pvt->port = 443;
+    }
+
     strncpy(tech_pvt->path, path.c_str(), MAX_PATH_LEN);    
     tech_pvt->sampling = desiredSampling;
     tech_pvt->responseHandler = responseHandler;
@@ -351,13 +376,13 @@ namespace {
 
     const char* apiKey = switch_channel_get_variable(channel, "DEEPGRAM_API_KEY");
     if (!apiKey && defaultApiKey) apiKey = defaultApiKey;
-    else if (!apiKey) {
+    else if (!apiKey && endpoint == nullptr) {
       switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "no deepgram api key provided\n");
       return SWITCH_STATUS_FALSE;
     }
 
     deepgram::AudioPipe* ap = new deepgram::AudioPipe(tech_pvt->sessionId, bugname, tech_pvt->host, tech_pvt->port, tech_pvt->path, 
-      buflen, read_impl.decoded_bytes_per_packet, apiKey, eventCallback);
+      buflen, read_impl.decoded_bytes_per_packet, apiKey, useTls, eventCallback);
     if (!ap) {
       switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Error allocating AudioPipe\n");
       return SWITCH_STATUS_FALSE;
