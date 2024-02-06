@@ -48,13 +48,15 @@ int AudioPipe::lws_callback(struct lws *wsi,
         AudioPipe* ap = findPendingConnect(wsi);
         if (ap) {
           std::string apiKey = ap->getApiKey();
-          unsigned char **p = (unsigned char **)in, *end = (*p) + len;
-          char b[256];
-          memset(b, 0, sizeof(b));
-          strcpy(b,"Token ");
-          strcpy(b + 6, apiKey.c_str());
+          if (apiKey.length() > 0) {
+            unsigned char **p = (unsigned char **)in, *end = (*p) + len;
+            char b[256];
+            memset(b, 0, sizeof(b));
+            strcpy(b,"Token ");
+            strcpy(b + 6, apiKey.c_str());
 
-          if (lws_add_http_header_by_token(wsi, WSI_TOKEN_HTTP_AUTHORIZATION, (unsigned char *)b, strlen(b), p, end)) return -1;
+            if (lws_add_http_header_by_token(wsi, WSI_TOKEN_HTTP_AUTHORIZATION, (unsigned char *)b, strlen(b), p, end)) return -1;
+          }
         }
       }
       break;
@@ -445,11 +447,14 @@ bool AudioPipe::deinitialize() {
 
 // instance members
 AudioPipe::AudioPipe(const char* uuid, const char* bugname, const char* host, unsigned int port, const char* path,
-  size_t bufLen, size_t minFreespace, const char* apiKey, notifyHandler_t callback) :
+  size_t bufLen, size_t minFreespace, const char* apiKey, int useTls, notifyHandler_t callback) :
   m_uuid(uuid), m_host(host), m_port(port), m_path(path), m_finished(false), m_bugname(bugname),
   m_audio_buffer_min_freespace(minFreespace), m_audio_buffer_max_len(bufLen), m_gracefulShutdown(false),
-  m_audio_buffer_write_offset(LWS_PRE), m_recv_buf(nullptr), m_recv_buf_ptr(nullptr), 
-  m_state(LWS_CLIENT_IDLE), m_wsi(nullptr), m_vhd(nullptr), m_apiKey(apiKey), m_callback(callback) {
+  m_audio_buffer_write_offset(LWS_PRE), m_recv_buf(nullptr), m_recv_buf_ptr(nullptr), m_useTls(useTls),
+  m_state(LWS_CLIENT_IDLE), m_wsi(nullptr), m_vhd(nullptr), m_callback(callback) {
+
+  if (apiKey) m_apiKey = apiKey;
+  else m_apiKey = "";
 
   m_audio_buffer = new uint8_t[m_audio_buffer_max_len];
 }
@@ -474,7 +479,7 @@ bool AudioPipe::connect_client(struct lws_per_vhost_data *vhd) {
   i.path = m_path.c_str();
   i.host = i.address;
   i.origin = i.address;
-  i.ssl_connection = LCCSCF_USE_SSL;
+  if (m_useTls) i.ssl_connection = LCCSCF_USE_SSL;
   i.pwsi = &(m_wsi);
 
   m_state = LWS_CLIENT_CONNECTING;
