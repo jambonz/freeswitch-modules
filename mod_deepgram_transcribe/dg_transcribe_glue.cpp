@@ -344,7 +344,6 @@ namespace {
       std::string ep(endpoint);
 
       useTls = switch_true(switch_channel_get_variable(channel, "DEEPGRAM_USE_TLS"));
-      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connecting to deepgram on-prem %s, tls? %d\n", ep.c_str(), useTls);
 
       size_t pos = ep.find(':');
       if (pos != std::string::npos) {
@@ -357,7 +356,8 @@ namespace {
         strncpy(tech_pvt->host, ep.c_str(), MAX_WS_URL_LEN);
         tech_pvt->port = 443;
       }
-      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connecting to deepgram on-prem %s port %d\n", tech_pvt->host, tech_pvt->port);
+      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, 
+        "connecting to deepgram on-prem %s port %d, using tls? (%s)\n", tech_pvt->host, tech_pvt->port, useTls ? "yes" : "no");
     }
     else {
       strncpy(tech_pvt->host, "api.deepgram.com", MAX_WS_URL_LEN);
