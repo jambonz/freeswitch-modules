@@ -32,12 +32,7 @@ namespace {
   static unsigned int idxCallCount = 0;
   static uint32_t playCount = 0;
 
-  /* deepgram model / tier defaults by language */
-  struct LanguageInfo {
-      std::string tier;
-      std::string model;
-  };
-
+  /* deepgram model defaults by language */
   static const std::unordered_map<std::string, std::string> languageLookupTable = {
       {"zh", "base"},
       {"zh-CN", "base"},
@@ -148,7 +143,6 @@ namespace {
     const char *var ;
     const char *model = switch_channel_get_variable(channel, "DEEPGRAM_SPEECH_MODEL");
     const char *customModel = switch_channel_get_variable(channel, "DEEPGRAM_SPEECH_CUSTOM_MODEL");
-    const char *tier = switch_channel_get_variable(channel, "DEEPGRAM_SPEECH_TIER") ;
     std::ostringstream oss;
 
     oss << "/v1/listen?";
@@ -160,7 +154,7 @@ namespace {
         oss << "&model=" << defaultModel;
       }
       else {
-        oss << "tier=base&model=base"; // most widely supported, though not ideal
+        oss << "model=base"; // most widely supported, though not ideal
       }
     }
     else if (model) oss << "&model=" << model;
