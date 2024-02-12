@@ -37,7 +37,8 @@ namespace {
       {"zh", "base"},
       {"zh-CN", "base"},
       {"zh-TW", "base"},
-      {"da", "enhanced"},
+      {"da", "nova-2"},
+      {"da-DK", "nova-2"},
       {"en", "nova-2"},
       {"en-US", "nova-2"},
       {"en-AU", "nova-2"},
@@ -45,29 +46,32 @@ namespace {
       {"en-IN", "nova-2"},
       {"en-NZ", "nova-2"},
       {"nl", "nova-2"},
+      {"nl-BE", "nova-2"},
       {"fr", "nova-2"},
       {"fr-CA", "nova-2"},
       {"de", "nova-2"},
+      {"el", "nova-2"},
       {"hi", "nova-2"},
       {"hi-Latn", "nova-2"},
-      {"id", "base"},
-      {"it", "enhanced"},
+      {"id", "nova-2"},
+      {"it", "nova-2"},
       {"ja", "enhanced"},
-      {"ko", "enhanced"},
-      {"no", "enhanced"},
-      {"pl", "enhanced"},
+      {"ko", "nova-2"},
+      {"ko-KR", "nova-2"},
+      {"no", "nova-2"},
+      {"pl", "nova-2"},
       {"pt","nova-2"},
       {"pt-BR", "nova-2"},
-      {"pt-PT", "enhanced"},
-      {"ru", "base"},
+      {"ru", "nova-2"},
       {"es","nova-2"},
       {"es-419","nova-2"},
       {"es-LATAM","enhanced"},
-      {"sv", "enhanced"},
+      {"sv", "nova-2"},
+      {"sv-SE", "nova-2"},
       {"ta", "enhanced"},
       {"taq", "enhanced"},
-      {"tr", "base"},
-      {"uk", "base"}
+      {"tr", "nova-2"},
+      {"uk", "nova-2"}
   };
 
   static bool getLanguageInfo(const std::string& language, std::string& model) {
@@ -239,9 +243,6 @@ namespace {
      oss <<  "&tag=";
      oss <<  var;
     }
-    if (interim) {
-     oss <<  "&interim_results=true";
-    }
     if (var = switch_channel_get_variable(channel, "DEEPGRAM_SPEECH_ENDPOINTING")) {
       oss <<  "&endpointing=";
       oss <<  var;
@@ -249,6 +250,11 @@ namespace {
     if (var = switch_channel_get_variable(channel, "DEEPGRAM_SPEECH_UTTERANCE_END_MS")) {
       oss <<  "&utterance_end_ms=";
       oss <<  var;
+      interim = 1; 
+      //this requires interim_results=true (https://developers.deepgram.com/docs/understanding-end-of-speech-detection)
+    }
+    if (interim) {
+     oss <<  "&interim_results=true";
     }
     if (var = switch_channel_get_variable(channel, "DEEPGRAM_SPEECH_VAD_TURNOFF")) {
       oss <<  "&vad_turnoff=";
