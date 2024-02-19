@@ -470,10 +470,6 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
 
     if (0 == w->reads++) {
       fireEvent = true;
-
-      /* trime leading 50ms = 400 samples since on elevenlabs it is silence */
-      //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "write_cb triming 400 samples (50ms) silence from start of buffer\n"); 
-      //cBuffer->erase(cBuffer->begin(), cBuffer->begin() + 400);
     }
     switch_mutex_unlock(w->mutex);
   }
@@ -661,6 +657,11 @@ extern "C" {
     else {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "created folder %s\n", fullDirPath.c_str());
     }
+    // init mgp123
+    if (mpg123_init() != MPG123_OK) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "failed to initiate MPG123");
+      return SWITCH_STATUS_FALSE;
+    }
 
     /* start worker thread that handles transfers*/
     std::thread t(threadFunc) ;
@@ -766,6 +767,7 @@ extern "C" {
 
     ConnInfo_t *conn = pool.malloc() ;
 
+    // COnfigure MPG123
     int mhError = 0;
     mpg123_handle *mh = mpg123_new("auto", &mhError);
     if (!mh) {
@@ -776,6 +778,11 @@ extern "C" {
 
     if (mpg123_open_feed(mh) != MPG123_OK) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error mpg123_open_feed!\n");
+      return SWITCH_STATUS_FALSE;
+		}
+
+    if (mpg123_format(mh, 8000/*Hz*/, 1 /*channels*/, MPG123_ENC_SIGNED_16 /*bits*/) != MPG123_OK) {
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error mpg123_format!\n");
       return SWITCH_STATUS_FALSE;
 		}
 
