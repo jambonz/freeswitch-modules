@@ -688,7 +688,9 @@ extern "C" {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "whisper_speech_unload: release curl multi\n");
     curl_multi_cleanup(global.multi);
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "whisper_speech_unload: completed\n");
-    
+
+    mpg123_exit();
+
 		return SWITCH_STATUS_SUCCESS;
   }
 
@@ -781,8 +783,8 @@ extern "C" {
       return SWITCH_STATUS_FALSE;
 		}
 
-    if (mpg123_format(mh, 8000/*Hz*/, 1 /*channels*/, MPG123_ENC_SIGNED_16 /*bits*/) != MPG123_OK) {
-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error mpg123_format!\n");
+    if (mpg123_format_all(mh) != MPG123_OK) {
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error mpg123_format_all!\n");
       return SWITCH_STATUS_FALSE;
 		}
 
