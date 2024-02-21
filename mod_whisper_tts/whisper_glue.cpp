@@ -382,7 +382,6 @@ int multi_timer_cb(CURLM *multi, long timeout_ms, GlobalInfo_t *g) {
 
 static std::vector<uint16_t> convert_mp3_to_linear(ConnInfo_t *conn, uint8_t *data, size_t len) {
   std::vector<uint16_t> linear_data;
-  int decode_status = 0;
   int eof = 0;
   int mp3err = 0;
   unsigned char decode_buf[MP3_DCACHE];
@@ -390,8 +389,10 @@ static std::vector<uint16_t> convert_mp3_to_linear(ConnInfo_t *conn, uint8_t *da
   if(mpg123_feed(conn->mh, data, len) == MPG123_OK) {
     while(!eof) {
       size_t usedlen = 0;
+      off_t frame_offset;
+      unsigned char* audio;
 
-      decode_status = mpg123_read(conn->mh, decode_buf, sizeof(decode_buf), &usedlen);
+      int decode_status = mpg123_decode_frame(conn->mh, &frame_offset, &audio, &usedlen);
 
       switch(decode_status) {
         case MPG123_NEW_FORMAT:
@@ -399,7 +400,7 @@ static std::vector<uint16_t> convert_mp3_to_linear(ConnInfo_t *conn, uint8_t *da
 
         case MPG123_OK:
           for(size_t i = 0; i < usedlen; i += 2) {
-            uint16_t value = decode_buf[i] | (decode_buf[i + 1] << 8);
+            uint16_t value = reinterpret_cast<uint16_t*>(audio)[i / 2];
             linear_data.push_back(value);
           }
           break;
@@ -765,7 +766,7 @@ extern "C" {
 
     cJSON_Delete(jResult);
 
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "elevenlabs_speech_feed_tts: [%s] [%s]\n", url.c_str(), tempText);
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "whisper_speech_feed_tts: [%s] [%s]\n", url.c_str(), tempText);
 
     ConnInfo_t *conn = pool.malloc() ;
 
@@ -785,6 +786,11 @@ extern "C" {
 
     if (mpg123_format_all(mh) != MPG123_OK) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error mpg123_format_all!\n");
+      return SWITCH_STATUS_FALSE;
+		}
+
+    if (mpg123_param(mh, MPG123_FORCE_RATE, 8000 /*Hz*/, 0) != MPG123_OK) {
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error mpg123_param!\n");
       return SWITCH_STATUS_FALSE;
 		}
 
