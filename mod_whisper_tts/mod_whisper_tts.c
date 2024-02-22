@@ -10,14 +10,33 @@ static void clearWhisper(whisper_t* w, int freeAll) {
   if (w->api_key) free(w->api_key);
   if (w->model_id) free(w->model_id);
   if (w->speed) free(w->speed);
+  if (w->request_id) free(w->request_id);
+  if (w->reported_latency) free(w->reported_latency);
+  if (w->ct) free(w->ct);
+  if (w->err_msg) free(w->err_msg);
+  if (w->name_lookup_time_ms) free(w->name_lookup_time_ms);
+  if (w->connect_time_ms) free(w->connect_time_ms);
+  if (w->final_response_time_ms) free(w->final_response_time_ms);
+  if (w->cache_filename) free(w->cache_filename);
+  
 
   w->api_key = NULL;
   w->model_id = NULL;
   w->speed = NULL;
+  w->request_id = NULL;
+  w->reported_latency = NULL;
+  w->ct = NULL;
+  w->err_msg = NULL;
+  w->name_lookup_time_ms = NULL;
+  w->connect_time_ms = NULL;
+  w->final_response_time_ms = NULL;
+  w->cache_filename = NULL;
 
   if (freeAll) {
     if (w->voice_name) free(w->voice_name);
+    if (w->session_id) free(w->session_id);
     w->voice_name = NULL;
+    w->session_id = NULL;
   }
 }
 

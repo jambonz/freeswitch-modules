@@ -495,9 +495,6 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
           if (w->request_id) {
             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_whisper_request_id", w->request_id);
           }
-          if (w->history_item_id) {
-            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_whisper_history_item_id", w->history_item_id);
-          }
           if (w->name_lookup_time_ms) {
             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_whisper_name_lookup_time_ms", w->name_lookup_time_ms);
           }
@@ -556,9 +553,8 @@ static size_t header_callback(char *buffer, size_t size, size_t nitems, ConnInfo
   std::string input(buffer, bytes_received);
   if (parseHeader(input, header, value)) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "recv header: %s with value %s\n", header.c_str(), value.c_str());
-    if (0 == header.compare("tts-latency-ms")) w->reported_latency = strdup(value.c_str());
-    else if (0 == header.compare("request-id")) w->request_id = strdup(value.c_str());
-    else if (0 == header.compare("history-item-id")) w->history_item_id = strdup(value.c_str());
+    if (0 == header.compare("openai-processing-ms")) w->reported_latency = strdup(value.c_str());
+    else if (0 == header.compare("x-request-id")) w->request_id = strdup(value.c_str());
   }
   else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "recv header: %s\n", input.c_str());
