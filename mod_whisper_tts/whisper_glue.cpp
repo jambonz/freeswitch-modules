@@ -338,7 +338,7 @@ static void threadFunc() {
   io_service.reset() ;
   boost::asio::io_service::work work(io_service);
   
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "mod_elevenlabs_tts threadFunc - starting\n");
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "mod_whisper_tts threadFunc - starting\n");
 
   for(;;) {
       
@@ -347,10 +347,10 @@ static void threadFunc() {
       break ;
     }
     catch( std::exception& e) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "mod_elevenlabs_tts threadFunc - Error: %s\n", e.what());
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "mod_whisper_tts threadFunc - Error: %s\n", e.what());
     }
   }
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "mod_elevenlabs_tts threadFunc - ending\n");
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "mod_whisper_tts threadFunc - ending\n");
 }
 
 
@@ -452,11 +452,12 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
       switch_mutex_unlock(w->mutex);
       return 0;
     }
-    pcm_data = convert_mp3_to_linear(conn, data, bytes_received);
 
-    /* and write to the file */
+    /* cache file will stay in the mp3 format for size (smaller) and simplicity */
+    if (conn->file) fwrite(data, sizeof(uint8_t), bytes_received, conn->file);
+
+    pcm_data = convert_mp3_to_linear(conn, data, bytes_received);
     size_t bytesResampled = pcm_data.size() * sizeof(uint16_t);
-    if (conn->file) fwrite(pcm_data.data(), sizeof(uint16_t), pcm_data.size(), conn->file);
 
     // Resize the buffer if necessary
     if (cBuffer->capacity() - cBuffer->size() < (bytesResampled / sizeof(uint16_t))) {
@@ -718,7 +719,7 @@ extern "C" {
       switch_uuid_get(&uuid);
       switch_uuid_format(uuid_str, &uuid);
 
-      switch_snprintf(outfile, sizeof(outfile), "%s%s%s.r8", fullDirPath.c_str(), SWITCH_PATH_SEPARATOR, uuid_str);
+      switch_snprintf(outfile, sizeof(outfile), "%s%s%s.mp3", fullDirPath.c_str(), SWITCH_PATH_SEPARATOR, uuid_str);
       w->cache_filename = strdup(outfile);
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "writing audio cache file to %s\n", w->cache_filename);
 
