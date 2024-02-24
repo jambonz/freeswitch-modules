@@ -129,6 +129,10 @@ extern "C" {
     speechConfig->SetSpeechSynthesisOutputFormat(SpeechSynthesisOutputFormat::Raw8Khz16BitMonoPcm);
     speechConfig->SetSpeechSynthesisLanguage(a->language);
     speechConfig->SetSpeechSynthesisVoiceName(a->voice_name);
+    if (a->http_proxy_ip) {
+      uint32_t port = a->http_proxy_port && a->http_proxy_port[0] != '\0' ? static_cast<uint32_t>(std::stoul(a->http_proxy_port)) : 80;
+      speechConfig->SetProxy(a->http_proxy_ip, port);
+    }
 
     if (nullptr != a->endpointId) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts setting endpoint id: %s\n", a->endpointId);
@@ -137,7 +141,7 @@ extern "C" {
 
     auto speechSynthesizer = SpeechSynthesizer::FromConfig(speechConfig);
 
-    auto result = speechSynthesizer->SpeakTextAsync(text).get();
+    auto result = std::strncmp(text, "<speak", 6) == 0 ? speechSynthesizer->SpeakSsmlAsync(text).get() : speechSynthesizer->SpeakTextAsync(text).get();
 
     if (result->Reason == ResultReason::SynthesizingAudioCompleted) {
       a->response_code = 200;
@@ -275,7 +279,7 @@ extern "C" {
     }
 
     a->resampler = NULL;
-		return SWITCH_STATUS_SUCCESS;
+    return SWITCH_STATUS_SUCCESS;
   }
 
   switch_status_t azure_speech_unload() {

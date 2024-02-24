@@ -10,6 +10,8 @@ typedef struct azure_data {
   char *language;
   char *endpoint;
   char *endpointId;
+  char *http_proxy_ip;
+  char *http_proxy_port;
 
   /* result data */
   long response_code;

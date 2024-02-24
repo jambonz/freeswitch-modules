@@ -15,6 +15,8 @@ static void clearAzure(azure_t* a, int freeAll) {
   if (a->endpoint) free(a->endpoint);
   if (a->endpointId) free(a->endpointId);
   if (a->err_msg) free(a->err_msg);
+  if (a->http_proxy_ip) free(a->http_proxy_ip);
+  if (a->http_proxy_port) free(a->http_proxy_port);
 
   
   a->cache_filename = NULL;
@@ -24,6 +26,8 @@ static void clearAzure(azure_t* a, int freeAll) {
   a->endpoint = NULL;
   a->endpointId = NULL;
   a->err_msg = NULL;
+  a->http_proxy_ip = NULL;
+  a->http_proxy_port = NULL;
 
 
   if (freeAll) {
@@ -36,14 +40,14 @@ static void clearAzure(azure_t* a, int freeAll) {
 }
 
 static azure_t * createOrRetrievePrivateData(switch_speech_handle_t *sh) {
-  azure_t *w = (azure_t *) sh->private_info;  
-  if (!w) {
-    w = switch_core_alloc(sh->memory_pool, sizeof(*w));
-  	sh->private_info = w;
-    memset(w, 0, sizeof(*w));
+  azure_t *a = (azure_t *) sh->private_info;  
+  if (!a) {
+    a = switch_core_alloc(sh->memory_pool, sizeof(*a));
+  	sh->private_info = a;
+    memset(a, 0, sizeof(*a));
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "allocated azure_t\n");
   }
-  return w;
+  return a;
 }
 
 switch_status_t a_speech_open(switch_speech_handle_t *sh, const char *voice_name, int rate, int channels, switch_speech_flag_t *flags)
@@ -74,7 +78,6 @@ static switch_status_t a_speech_feed_tts(switch_speech_handle_t *sh, char *text,
   azure_t *a = createOrRetrievePrivateData(sh);
   a->draining = 0;
   a->reads = 0;
-  a->flushed = 0;
 
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "a_speech_feed_tts\n");
 
@@ -125,6 +128,12 @@ static void a_text_param_tts(switch_speech_handle_t *sh, char *param, const char
   } else if (0 == strcmp(param, "endpointId")) {
     if (a->endpointId) free(a->endpointId);
     a->endpointId = strdup(val);
+  } else if (0 == strcmp(param, "http_proxy_ip")) {
+    if (a->http_proxy_ip) free(a->http_proxy_ip);
+    a->http_proxy_ip = strdup(val);
+  } else if (0 == strcmp(param, "http_proxy_port")) {
+    if (a->http_proxy_port) free(a->http_proxy_port);
+    a->http_proxy_port = strdup(val);
   } else if (0 == strcmp(param, "session-uuid")) {
     if (a->session_id) free(a->session_id);
     a->session_id = strdup(val);
