@@ -278,4 +278,8 @@ extern "C" {
 		return SWITCH_STATUS_SUCCESS;
   }
 
+  switch_status_t azure_speech_unload() {
+    return SWITCH_STATUS_SUCCESS;
+  }
+
 }
