@@ -2,10 +2,15 @@
 #include <switch.h>
 #include <speechapi_cxx.h>
 
+#include <boost/circular_buffer.hpp>
+
 #include <cstdlib>
 #include <string>
 
 #define BUFFER_SIZE 8129
+
+typedef boost::circular_buffer<uint16_t> CircularBuffer_t;
+
 using namespace Microsoft::CognitiveServices::Speech;
 
 static std::string fullDirPath;
@@ -120,6 +125,8 @@ extern "C" {
       }
     }
 
+    a->circularBuffer = (void *) new CircularBuffer_t(BUFFER_SIZE);
+
     auto speechConfig = nullptr != a->endpoint ? 
 			(nullptr != a->api_key ?
 				SpeechConfig::FromEndpoint(a->endpoint, a->api_key) :
@@ -141,72 +148,122 @@ extern "C" {
 
     auto speechSynthesizer = SpeechSynthesizer::FromConfig(speechConfig);
 
-    auto result = std::strncmp(text, "<speak", 6) == 0 ? speechSynthesizer->SpeakSsmlAsync(text).get() : speechSynthesizer->SpeakTextAsync(text).get();
+    speechSynthesizer->SynthesisStarted += [a](const SpeechSynthesisEventArgs& e) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts SynthesisStarted");
+        a->response_code = 200;
+    };
 
-    if (result->Reason == ResultReason::SynthesizingAudioCompleted) {
-      a->response_code = 200;
-      auto audioDataStream = AudioDataStream::FromResult(result);
-      a->audioStream = (void *) new std::shared_ptr<AudioDataStream>(audioDataStream);;
-    } else if (result->Reason == ResultReason::Canceled) {
-      auto cancellation = SpeechSynthesisCancellationDetails::FromResult(result);
-      a->response_code = static_cast<long int>(cancellation->ErrorCode);
-      a->err_msg = strdup(cancellation->ErrorDetails.c_str());
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error synthsize tex %d with error string: %s.\n", static_cast<int>(cancellation->ErrorCode), cancellation->ErrorDetails);
-      return SWITCH_STATUS_FALSE;
+    speechSynthesizer->Synthesizing += [a](const SpeechSynthesisEventArgs& e) {
+      bool fireEvent = false;
+      CircularBuffer_t *cBuffer = (CircularBuffer_t *) a->circularBuffer;
+      std::vector<uint16_t> pcm_data;
+
+      if (a->flushed) {
+        return;
+      }
+      {
+        switch_mutex_lock(a->mutex);
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Synthesizing: received data");
+        auto audioData = e.Result->GetAudioData();
+        for (size_t i = 0; i < audioData->size(); i += sizeof(int16_t)) {
+            int16_t value = static_cast<int16_t>((*audioData)[i]) | (static_cast<int16_t>((*audioData)[i + 1]) << 8);
+            pcm_data.push_back(value);
+        }
+
+        /* and write to the file */
+        size_t bytesResampled = pcm_data.size() * sizeof(uint16_t);
+        if (a->file) fwrite(pcm_data.data(), sizeof(uint16_t), pcm_data.size(), a->file);
+
+        // Resize the buffer if necessary
+        if (cBuffer->capacity() - cBuffer->size() < (bytesResampled / sizeof(uint16_t))) {
+
+          //TODO: if buffer exceeds some max size, return CURL_WRITEFUNC_ERROR to abort the transfer
+          cBuffer->set_capacity(cBuffer->size() + std::max((bytesResampled / sizeof(uint16_t)), (size_t)BUFFER_SIZE));
+        }
+
+        /* Push the data into the buffer */
+        cBuffer->insert(cBuffer->end(), pcm_data.data(), pcm_data.data() + pcm_data.size());
+
+        switch_mutex_unlock(a->mutex);
+      }
+
+      if (0 == a->reads++) {
+        fireEvent = true;
+      }
+    };
+
+    speechSynthesizer->SynthesisCompleted += [a](const SpeechSynthesisEventArgs& e) {
+       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts SynthesisCompleted");
+       a->draining = 1;
+    };
+
+    speechSynthesizer->SynthesisCanceled += [a](const SpeechSynthesisEventArgs& e) {
+      if (e.Result->Reason == ResultReason::Canceled) {
+        auto cancellation = SpeechSynthesisCancellationDetails::FromResult(e.Result);
+        a->response_code = static_cast<long int>(cancellation->ErrorCode);
+        a->err_msg = strdup(cancellation->ErrorDetails.c_str());
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error synthsize tex %d with error string: %s.\n", static_cast<int>(cancellation->ErrorCode), cancellation->ErrorDetails);
+      }
+      
+    };
+    if (std::strncmp(text, "<speak", 6) == 0) {
+      speechSynthesizer->SpeakSsmlAsync(text);
+    } else {
+      speechSynthesizer->SpeakTextAsync(text);
     }
     return SWITCH_STATUS_SUCCESS;
   }
 
   switch_status_t azure_speech_read_tts(azure_t* a, void *data, size_t *datalen, switch_speech_flag_t *flags) {
-    if (a->response_code > 0 && a->response_code != 200) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "azure_speech_read_tts, returning failure\n") ;  
-      return SWITCH_STATUS_FALSE;
-    }
+    CircularBuffer_t *cBuffer = (CircularBuffer_t *) a->circularBuffer;
+    std::vector<uint16_t> pcm_data;
 
-    if (a->flushed) {
-      return SWITCH_STATUS_BREAK;
-    }
+    {
+      switch_mutex_lock(a->mutex);
+      if (a->response_code > 0 && a->response_code != 200) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "azure_speech_read_tts, returning failure\n") ;  
+        return SWITCH_STATUS_FALSE;
+      }
 
-    if (!a->audioStream) {
-      /* no audio available yet so send silence */
-      memset(data, 255, *datalen);
-      return SWITCH_STATUS_SUCCESS;
-    }
-
-    auto audioStream = *(static_cast<std::shared_ptr<AudioDataStream>*>(a->audioStream));
-    std::vector<uint8_t> audioBuffer(*datalen);
-    uint32_t bytesRead = audioStream->ReadData(audioBuffer.data(), *datalen);
-    // write to cache file *.r8
-    if (a->file) {
-      fwrite(audioBuffer.data(), sizeof(uint8_t), bytesRead, a->file);
-    }
-    // There is no more to read, finished
-    if (bytesRead == 0) {
-        a->flushed = 1;
-        if (a->file) {
-          if (fclose(a->file) != 0) {
-            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "azure_speech_read_tts: error closing audio cache file\n");
-          }
-          a->file = nullptr ;
-        }
+      if (a->flushed) {
         return SWITCH_STATUS_BREAK;
+      }
+
+      if (cBuffer->empty()) {
+        if (a->draining) {
+          switch_mutex_unlock(a->mutex);
+          return SWITCH_STATUS_BREAK;
+        }
+        /* no audio available yet so send silence */
+        memset(data, 255, *datalen);
+        switch_mutex_unlock(a->mutex);
+        return SWITCH_STATUS_SUCCESS;
+      }
+
+      size_t size = std::min((*datalen/2), cBuffer->size());
+      pcm_data.insert(pcm_data.end(), cBuffer->begin(), cBuffer->begin() + size);
+      cBuffer->erase(cBuffer->begin(), cBuffer->begin() + size);
+      switch_mutex_unlock(a->mutex);
     }
+
+    size_t data_size = pcm_data.size();
+
+    int16_t* outData = reinterpret_cast<int16_t*>(data);
 
     if (a->resampler) {
-        int16_t in[bytesRead/2];
-        std::memcpy(in, audioBuffer.data(), bytesRead);
+        std::vector<int16_t> in(pcm_data.begin(), pcm_data.end());
 
-        int16_t out[bytesRead/2];
-        spx_uint32_t in_len = bytesRead / 2;
-        spx_uint32_t out_len = bytesRead / 2;
+        std::vector<int16_t> out(data_size);
+        spx_uint32_t in_len = data_size;
+        spx_uint32_t out_len = data_size;
 
-        // Resample the audio
-        speex_resampler_process_interleaved_int(a->resampler, in, &in_len, out, &out_len);
-        std::memcpy(data, out, out_len * 2);
-        *datalen = out_len * 2;
+        speex_resampler_process_interleaved_int(a->resampler, in.data(), &in_len, out.data(), &out_len);
+
+        memcpy(data, out.data(), out_len * sizeof(int16_t));
+        *datalen = out_len * sizeof(int16_t);
     } else {
-        std::memcpy(data, audioBuffer.data(), bytesRead);
-        *datalen = bytesRead;
+        memcpy(data, pcm_data.data(), data_size * sizeof(int16_t));
+        *datalen = data_size * sizeof(int16_t);
     }
 
     return SWITCH_STATUS_SUCCESS;
@@ -214,7 +271,12 @@ extern "C" {
 
   switch_status_t azure_speech_flush_tts(azure_t* a) {
     bool download_complete = a->response_code == 200;
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "azure_speech_flush_tts, download complete? %s\n", download_complete ? "yes" : "no") ;  
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "azure_speech_flush_tts, download complete? %s\n", download_complete ? "yes" : "no") ;
+
+    CircularBuffer_t *cBuffer = (CircularBuffer_t *) a->circularBuffer;
+    delete cBuffer;
+    a->circularBuffer = nullptr ;
+
     a->flushed = 1;
     if (!download_complete) {
       if (a->file) {
@@ -271,11 +333,6 @@ extern "C" {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "azure_speech_close\n") ;
     if (a->resampler) {
       speex_resampler_destroy(a->resampler);
-    }
-    if (a->audioStream) {
-      auto ptr = static_cast<std::shared_ptr<AudioDataStream>*>(a->audioStream);
-      delete ptr;
-      a->audioStream = NULL; 
     }
 
     a->resampler = NULL;

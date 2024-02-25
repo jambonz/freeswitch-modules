@@ -26,8 +26,9 @@ typedef struct azure_data {
   int flushed;
 
   FILE *file;
-  void *audioStream;
   SpeexResamplerState *resampler;
+  void *circularBuffer;
+  switch_mutex_t *mutex;
 } azure_t;
 
 #endif

@@ -45,6 +45,7 @@ static azure_t * createOrRetrievePrivateData(switch_speech_handle_t *sh) {
     a = switch_core_alloc(sh->memory_pool, sizeof(*a));
   	sh->private_info = a;
     memset(a, 0, sizeof(*a));
+    switch_mutex_init(&a->mutex, SWITCH_MUTEX_NESTED, sh->memory_pool);
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "allocated azure_t\n");
   }
   return a;
@@ -64,6 +65,8 @@ static switch_status_t a_speech_close(switch_speech_handle_t *sh, switch_speech_
   switch_status_t rc;
   azure_t *a = createOrRetrievePrivateData(sh);
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "a_speech_close\n");
+
+  switch_mutex_destroy(a->mutex);
 
   rc = azure_speech_close(a);
   clearAzure(a, 1);
