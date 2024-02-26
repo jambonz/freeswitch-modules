@@ -81,6 +81,7 @@ static switch_status_t a_speech_feed_tts(switch_speech_handle_t *sh, char *text,
   azure_t *a = createOrRetrievePrivateData(sh);
   a->draining = 0;
   a->reads = 0;
+  a->flushed = 0;
 
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "a_speech_feed_tts\n");
 
@@ -158,7 +159,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_azure_tts_load)
 
   *module_interface = switch_loadable_module_create_module_interface(pool, modname);
   speech_interface = switch_loadable_module_create_interface(*module_interface, SWITCH_SPEECH_INTERFACE);
-  speech_interface->interface_name = "azure";
+  speech_interface->interface_name = "microsoft";
   speech_interface->speech_open = a_speech_open;
   speech_interface->speech_close = a_speech_close;
   speech_interface->speech_feed_tts = a_speech_feed_tts;

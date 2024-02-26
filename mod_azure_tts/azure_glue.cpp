@@ -100,11 +100,6 @@ extern "C" {
       return SWITCH_STATUS_FALSE;
     }
 
-    if (!a->region) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "azure_speech_feed_tts: no region provided\n");
-      return SWITCH_STATUS_FALSE;
-    }
-
     if (!a->language) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "azure_speech_feed_tts: no language provided\n");
       return SWITCH_STATUS_FALSE;
@@ -131,7 +126,7 @@ extern "C" {
 			(nullptr != a->api_key ?
 				SpeechConfig::FromEndpoint(a->endpoint, a->api_key) :
 				SpeechConfig::FromEndpoint(a->endpoint)) :
-			SpeechConfig::FromSubscription(a->api_key, a->region);
+			SpeechConfig::FromSubscription(a->api_key, a->region ? a->region : "");
 
     speechConfig->SetSpeechSynthesisOutputFormat(SpeechSynthesisOutputFormat::Raw8Khz16BitMonoPcm);
     speechConfig->SetSpeechSynthesisLanguage(a->language);
@@ -149,7 +144,7 @@ extern "C" {
     auto speechSynthesizer = SpeechSynthesizer::FromConfig(speechConfig);
 
     speechSynthesizer->SynthesisStarted += [a](const SpeechSynthesisEventArgs& e) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts SynthesisStarted");
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts SynthesisStarted\n");
         a->response_code = 200;
     };
 
@@ -158,12 +153,13 @@ extern "C" {
       CircularBuffer_t *cBuffer = (CircularBuffer_t *) a->circularBuffer;
       std::vector<uint16_t> pcm_data;
 
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Synthesizing: received data\n");
+
       if (a->flushed) {
         return;
       }
       {
         switch_mutex_lock(a->mutex);
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Synthesizing: received data");
         auto audioData = e.Result->GetAudioData();
         for (size_t i = 0; i < audioData->size(); i += sizeof(int16_t)) {
             int16_t value = static_cast<int16_t>((*audioData)[i]) | (static_cast<int16_t>((*audioData)[i + 1]) << 8);
@@ -193,7 +189,7 @@ extern "C" {
     };
 
     speechSynthesizer->SynthesisCompleted += [a](const SpeechSynthesisEventArgs& e) {
-       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts SynthesisCompleted");
+       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts SynthesisCompleted\n");
        a->draining = 1;
     };
 
@@ -202,15 +198,16 @@ extern "C" {
         auto cancellation = SpeechSynthesisCancellationDetails::FromResult(e.Result);
         a->response_code = static_cast<long int>(cancellation->ErrorCode);
         a->err_msg = strdup(cancellation->ErrorDetails.c_str());
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error synthsize tex %d with error string: %s.\n", static_cast<int>(cancellation->ErrorCode), cancellation->ErrorDetails);
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error synthsize tex %d with error string: %s.\n", static_cast<int>(cancellation->ErrorCode), cancellation->ErrorDetails.c_str());
       }
-      
     };
+    // switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts before sending synthesize request\n");
     if (std::strncmp(text, "<speak", 6) == 0) {
       speechSynthesizer->SpeakSsmlAsync(text);
     } else {
       speechSynthesizer->SpeakTextAsync(text);
     }
+    // switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts sent synthesize request\n");
     return SWITCH_STATUS_SUCCESS;
   }
 
@@ -224,11 +221,9 @@ extern "C" {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "azure_speech_read_tts, returning failure\n") ;  
         return SWITCH_STATUS_FALSE;
       }
-
       if (a->flushed) {
         return SWITCH_STATUS_BREAK;
       }
-
       if (cBuffer->empty()) {
         if (a->draining) {
           switch_mutex_unlock(a->mutex);
