@@ -82,6 +82,7 @@ static switch_status_t a_speech_feed_tts(switch_speech_handle_t *sh, char *text,
   a->draining = 0;
   a->reads = 0;
   a->flushed = 0;
+  a->samples_rate = 0;
 
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "a_speech_feed_tts\n");
 

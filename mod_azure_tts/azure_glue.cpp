@@ -111,8 +111,9 @@ extern "C" {
       switch_core_session_t *psession = switch_core_session_locate(a->session_id);
       switch_core_session_get_read_impl(psession, &read_impl);
       uint32_t samples_per_second = !strcasecmp(read_impl.iananame, "g722") ? read_impl.actual_samples_per_second : read_impl.samples_per_second;
+      a->samples_rate = samples_per_second;
       if (samples_per_second != 8000 /*Hz*/) {
-        a->resampler = speex_resampler_init(1, samples_per_second, 8000, SWITCH_RESAMPLE_QUALITY, &err);
+        a->resampler = speex_resampler_init(1, 8000, samples_per_second, SWITCH_RESAMPLE_QUALITY, &err);
         if (0 != err) {
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error initializing resampler: %s.\n", speex_resampler_strerror(err));
           return SWITCH_STATUS_FALSE;
@@ -218,7 +219,7 @@ extern "C" {
     {
       switch_mutex_lock(a->mutex);
       if (a->response_code > 0 && a->response_code != 200) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "azure_speech_read_tts, returning failure\n") ;  
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "azure_speech_read_tts, returning failure\n") ;
         return SWITCH_STATUS_FALSE;
       }
       if (a->flushed) {
@@ -234,8 +235,10 @@ extern "C" {
         switch_mutex_unlock(a->mutex);
         return SWITCH_STATUS_SUCCESS;
       }
-
-      size_t size = std::min((*datalen/2), cBuffer->size());
+      // azure returned 8000hz 16 bit data, we have to take enough data based on call sample rate.
+      size_t size = a->samples_rate ?
+        std::min((*datalen/(2 * a->samples_rate / 8000)), cBuffer->size()) :
+        std::min((*datalen/2), cBuffer->size());
       pcm_data.insert(pcm_data.end(), cBuffer->begin(), cBuffer->begin() + size);
       cBuffer->erase(cBuffer->begin(), cBuffer->begin() + size);
       switch_mutex_unlock(a->mutex);
@@ -243,16 +246,19 @@ extern "C" {
 
     size_t data_size = pcm_data.size();
 
-    int16_t* outData = reinterpret_cast<int16_t*>(data);
-
     if (a->resampler) {
         std::vector<int16_t> in(pcm_data.begin(), pcm_data.end());
 
-        std::vector<int16_t> out(data_size);
+        std::vector<int16_t> out((*datalen));
         spx_uint32_t in_len = data_size;
-        spx_uint32_t out_len = data_size;
+        spx_uint32_t out_len = out.size();
 
         speex_resampler_process_interleaved_int(a->resampler, in.data(), &in_len, out.data(), &out_len);
+
+        if (out_len > out.size()) {
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CRIT, "Resampler output exceeded maximum buffer size!\n");
+          return SWITCH_STATUS_FALSE;
+        }
 
         memcpy(data, out.data(), out_len * sizeof(int16_t));
         *datalen = out_len * sizeof(int16_t);
