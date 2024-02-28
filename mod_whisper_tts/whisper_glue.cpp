@@ -786,10 +786,10 @@ extern "C" {
       return SWITCH_STATUS_FALSE;
 		}
 
-    if (mpg123_param(mh, MPG123_FORCE_RATE, 8000 /*Hz*/, 0) != MPG123_OK) {
-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error mpg123_param!\n");
+    if (mpg123_param(mh, MPG123_FLAGS, MPG123_MONO_MIX, 0) != MPG123_OK) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error forcing single channel!\n");
       return SWITCH_STATUS_FALSE;
-		}
+    }
 
     CURL* easy = createEasyHandle();
     w->conn = (void *) conn ;
@@ -800,9 +800,22 @@ extern "C" {
     conn->hdr_list = NULL ;
     conn->file = w->file;
     conn->body = json;
-    conn->flushed = false; 
+    conn->flushed = false;
+    
 
     w->circularBuffer = (void *) new CircularBuffer_t(8192);
+
+    if (w->session_id) {
+      int err;
+      switch_codec_implementation_t read_impl;
+      switch_core_session_t *psession = switch_core_session_locate(w->session_id);
+      switch_core_session_get_read_impl(psession, &read_impl);
+      uint32_t samples_per_second = !strcasecmp(read_impl.iananame, "g722") ? read_impl.actual_samples_per_second : read_impl.samples_per_second;
+      if (mpg123_param(mh, MPG123_FORCE_RATE, samples_per_second /*Hz*/, 0) != MPG123_OK) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error mpg123_param!\n");
+        return SWITCH_STATUS_FALSE;
+      }
+    }
 
     std::ostringstream api_key_stream;
     api_key_stream << "Authorization: Bearer " << w->api_key;
@@ -851,7 +864,6 @@ extern "C" {
     {
       switch_mutex_lock(w->mutex);
       ConnInfo_t *conn = (ConnInfo_t *) w->conn;
-
       if (w->response_code > 0 && w->response_code != 200) {
         switch_mutex_unlock(w->mutex);
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "whisper_speech_read_tts, returning failure\n") ;  
