@@ -6,6 +6,7 @@
 
 #include <cstdlib>
 #include <string>
+#include <chrono>
 
 #define BUFFER_SIZE 8129
 
@@ -121,6 +122,9 @@ extern "C" {
       }
     }
 
+    std::chrono::time_point<std::chrono::high_resolution_clock>* ptr = new std::chrono::time_point<std::chrono::high_resolution_clock>(std::chrono::high_resolution_clock::now());
+    a->startTime = ptr;
+
     a->circularBuffer = (void *) new CircularBuffer_t(BUFFER_SIZE);
 
     auto speechConfig = nullptr != a->endpoint ? 
@@ -186,6 +190,33 @@ extern "C" {
 
       if (0 == a->reads++) {
         fireEvent = true;
+      }
+
+      if (fireEvent && a->session_id) {
+        auto endTime = std::chrono::high_resolution_clock::now();
+        auto startTime = *static_cast<std::chrono::time_point<std::chrono::high_resolution_clock>*>(a->startTime);
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+        auto time_to_first_byte_ms = std::to_string(duration.count());
+        switch_core_session_t* session = switch_core_session_locate(a->session_id);
+        if (session) {
+          switch_channel_t *channel = switch_core_session_get_channel(session);
+          if (channel) {
+            switch_event_t *event;
+            if (switch_event_create(&event, SWITCH_EVENT_PLAYBACK_START) == SWITCH_STATUS_SUCCESS) {
+              switch_channel_event_set_data(channel, event);
+              switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_time_to_first_byte_ms", time_to_first_byte_ms.c_str());
+              if (a->cache_filename) {
+                switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_cache_filename", a->cache_filename);
+              }
+              switch_event_fire(&event);
+            } else {
+              switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "speechSynthesizer->Synthesizing: failed to create event\n");
+            }
+          }else {
+            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "speechSynthesizer->Synthesizing: channel not found\n");
+          }
+          switch_core_session_rwunlock(session);
+        }
       }
     };
 
@@ -277,6 +308,8 @@ extern "C" {
     CircularBuffer_t *cBuffer = (CircularBuffer_t *) a->circularBuffer;
     delete cBuffer;
     a->circularBuffer = nullptr ;
+    delete static_cast<std::chrono::time_point<std::chrono::high_resolution_clock>*>(a->startTime);
+    a->startTime = nullptr;
 
     a->flushed = 1;
     if (!download_complete) {
@@ -344,4 +377,4 @@ extern "C" {
     return SWITCH_STATUS_SUCCESS;
   }
 
-}
+} 

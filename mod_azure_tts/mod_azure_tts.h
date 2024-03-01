@@ -3,6 +3,7 @@
 
 #include <switch.h>
 #include <speex/speex_resampler.h>
+
 typedef struct azure_data {
   char *voice_name;
   char *api_key;
@@ -25,6 +26,8 @@ typedef struct azure_data {
   int cache_audio;
   int flushed;
   uint32_t samples_rate;
+
+  void *startTime;
 
   FILE *file;
   SpeexResamplerState *resampler;
