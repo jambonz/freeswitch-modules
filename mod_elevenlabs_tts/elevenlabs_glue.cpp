@@ -29,6 +29,7 @@
 #include <boost/asio.hpp>
 #include <boost/assign/list_of.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/unordered_map.hpp>
 
 #include "mod_elevenlabs_tts.h"
 #include <speex/speex_resampler.h>

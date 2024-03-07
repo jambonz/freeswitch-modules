@@ -759,7 +759,7 @@ extern "C" {
     if (w->speed) {
       cJSON_AddStringToObject(jResult, "speed", w->speed);
     }
-    char *json = cJSON_PrintUnformatted(jResult);;
+    char *json = cJSON_PrintUnformatted(jResult);
 
     cJSON_Delete(jResult);
 
