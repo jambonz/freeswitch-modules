@@ -135,6 +135,13 @@ public:
       properties.SetProperty(PropertyId::Speech_SegmentationSilenceTimeoutMs, segmentationInterval);
     }
 
+		//https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-identification?tabs=once&pivots=programming-language-cpp#at-start-and-continuous-language-identification
+		const char* languageIdMode = switch_channel_get_variable(channel, "AZURE_LANGUAGE_ID_MODE");
+		if (languageIdMode) {
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(psession), SWITCH_LOG_DEBUG, "setting SpeechServiceConnection_LanguageIdMode to %s \n", languageIdMode);
+			properties.SetProperty(PropertyId::SpeechServiceConnection_LanguageIdMode, languageIdMode);
+		}
+
 		// recognition mode - readonly according to Azure docs: 
 		// https://docs.microsoft.com/en-us/javascript/api/microsoft-cognitiveservices-speech-sdk/propertyid?view=azure-node-latest
 		/*
