@@ -2,20 +2,10 @@
 
 #include <sstream>
 #include <switch_json.h>
+#include <map>
 
-switch_status_t tts_vendor_parse_text(const std::string& text, std::string& url, std::string& body, std::vector<std::string>& headers) {
-  if (text.find("vendor=elevenlabs") != std::string::npos) {
-    return elevenlabs_parse_text(text, url, body, headers);
-  } else {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "tts_vendor_parse_text: There is no available parser for text\n");
-    return SWITCH_STATUS_FALSE;
-  }
-}
-
-switch_status_t elevenlabs_parse_text(const std::string& text, std::string& url, std::string& body, std::vector<std::string>& headers) {
-  size_t start = text.find("{") + 1;
-  size_t end = text.find("}");
-
+switch_status_t elevenlabs_parse_text(std::map<std::string, std::string> params, std::string text, std::string& url,
+  std::string& body, std::vector<std::string>& headers) {
   std::string api_key;
   std::string voice_name;
   std::string model_id;
@@ -25,37 +15,23 @@ switch_status_t elevenlabs_parse_text(const std::string& text, std::string& url,
   std::string use_speaker_boost;
   std::string optimize_streaming_latency;
 
-  body = text.substr(end + 1);
-
-
-  std::string params_string = text.substr(start, end - start);
-  std::istringstream ss(params_string);
-
-  while (ss.good()) {
-    std::string substr;
-    getline(ss, substr, ',');
-    substr.erase(0, substr.find_first_not_of(' '));
-
-    size_t equal_pos = substr.find("=");
-    std::string key = substr.substr(0, equal_pos);
-    std::string value = substr.substr(equal_pos + 1, substr.size());
-
-    if (key == "api_key") {
-      api_key = value;
-    } else if (key == "voice_name") {
-      voice_name = value;
-    } else if (key == "model_id") {
-      model_id = value;
-    } else if (key == "similarity_boost") {
-      similarity_boost = value;
-    } else if (key == "stability") {
-      stability = value;
-    } else if (key == "style") {
-      style = value;
-    } else if (key == "use_speaker_boost") {
-      use_speaker_boost = value;
-    } else if (key == "modeloptimize_streaming_latency_id") {
-      optimize_streaming_latency = value;
+  for (const auto& pair : params) {
+    if (pair.first == "api_key") {
+      api_key = pair.second;
+    } else if (pair.first == "voice_name") {
+      voice_name = pair.second;
+    } else if (pair.first == "model_id") {
+      model_id = pair.second;
+    } else if (pair.first == "similarity_boost") {
+      similarity_boost = pair.second;
+    } else if (pair.first == "stability") {
+      stability = pair.second;
+    } else if (pair.first == "style") {
+      style = pair.second;
+    } else if (pair.first == "use_speaker_boost") {
+      use_speaker_boost = pair.second;
+    } else if (pair.first == "modeloptimize_streaming_latency_id") {
+      optimize_streaming_latency = pair.second;
     }
   }
 
@@ -106,4 +82,36 @@ switch_status_t elevenlabs_parse_text(const std::string& text, std::string& url,
     headers.push_back(api_key_stream.str());
   }
   return SWITCH_STATUS_SUCCESS;
+}
+
+switch_status_t tts_vendor_parse_text(const std::string& say, std::string& url, std::string& body, std::vector<std::string>& headers) {
+  // Parse Say string
+  size_t start = say.find("{") + 1;
+  size_t end = say.find("}");
+
+  std::string text = say.substr(end + 1);
+
+  std::string params_string = say.substr(start, end - start);
+  std::istringstream ss(params_string);
+  std::map<std::string, std::string> params;
+
+  while (ss.good()) {
+    std::string substr;
+    getline(ss, substr, ',');
+    substr.erase(0, substr.find_first_not_of(' '));
+
+    size_t equal_pos = substr.find("=");
+    std::string key = substr.substr(0, equal_pos);
+    std::string value = substr.substr(equal_pos + 1, substr.size());
+
+    params[key] = value;
+  }
+
+
+  if (params["vendor"] == "elevenlabs") {
+    return elevenlabs_parse_text(params, text, url, body, headers);
+  } else {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "tts_vendor_parse_text: There is no available parser for text\n");
+    return SWITCH_STATUS_FALSE;
+  }
 }
