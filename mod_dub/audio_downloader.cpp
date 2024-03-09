@@ -75,6 +75,9 @@ typedef struct
   char error[CURL_ERROR_SIZE]; // curl error buffer
   char *err_msg; // http server error message
   char* url;
+  char* body;
+  std::vector<std::string> headers;
+  struct curl_slist *hdr_list;
   bool loop;
   int rate;
   boost::asio::deadline_timer *timer;
@@ -95,7 +98,8 @@ static std::string fullDirPath;
 static std::thread worker_thread;
 
 /* forward declarations */
-static ConnInfo_t* createDownloader(const char *url, int rate, int loop, int gain, mpg123_handle *mhm, switch_mutex_t *mutex, CircularBuffer_t *buffer);
+static ConnInfo_t* createDownloader(const char *url, const char* body, std::vector<std::string> headers,
+  int rate, int loop, int gain, mpg123_handle *mhm, switch_mutex_t *mutex, CircularBuffer_t *buffer);
 static CURL* createEasyHandle(void);
 static void destroyConnection(ConnInfo_t *conn);
 static void check_multi_info(GlobalInfo_t *g) ;
@@ -172,7 +176,7 @@ extern "C" {
     return SWITCH_STATUS_SUCCESS;
   }
 
-  downloadId_t start_audio_download(const char* url, int rate, int loop, int gain, switch_mutex_t* mutex, CircularBuffer_t* buffer) {
+  downloadId_t start_audio_download(const char* url, const char* body, std::vector<std::string> headers, int rate, int loop, int gain, switch_mutex_t* mutex, CircularBuffer_t* buffer) {
     int mhError = 0;
 
     /* allocate handle for mpeg decoding */
@@ -203,7 +207,7 @@ extern "C" {
       return INVALID_DOWNLOAD_ID;
     }
 
-    ConnInfo_t* conn = createDownloader(url, rate, loop, gain, mh, mutex, buffer);
+    ConnInfo_t* conn = createDownloader(url, body, headers, rate, loop, gain, mh, mutex, buffer);
     if (!conn) {
       return INVALID_DOWNLOAD_ID;
     }
@@ -246,7 +250,7 @@ extern "C" {
 }
 
 /* internal */
-ConnInfo_t* createDownloader(const char *url, int rate, int loop, int gain, mpg123_handle *mh, switch_mutex_t *mutex, CircularBuffer_t *buffer) {
+ConnInfo_t* createDownloader(const char *url, const char* body, std::vector<std::string> headers, int rate, int loop, int gain, mpg123_handle *mh, switch_mutex_t *mutex, CircularBuffer_t *buffer) {
   ConnInfo_t *conn = pool.malloc() ;
   CURL* easy = createEasyHandle();
 
@@ -264,6 +268,9 @@ ConnInfo_t* createDownloader(const char *url, int rate, int loop, int gain, mpg1
   conn->gain = gain;
   conn->rate = rate;
   conn->url = strdup(url);
+  conn->body = strdup(body);
+  conn->headers = headers;
+  conn->hdr_list = NULL;
   conn->global = &global;
   conn->status = Status_t::STATUS_NONE; 
   conn->timer = new boost::asio::deadline_timer(io_service);
@@ -295,6 +302,15 @@ ConnInfo_t* createDownloader(const char *url, int rate, int loop, int gain, mpg1
 
   /* keep the speed down so we don't have to buffer large amounts*/
   curl_easy_setopt(easy, CURLOPT_MAX_RECV_SPEED_LARGE, (curl_off_t)31415);
+  /*Add request body*/
+  if (conn->body) {
+    curl_easy_setopt(easy, CURLOPT_POSTFIELDS, conn->body);
+  }
+  /*Add request headers*/
+  for(const auto& header : headers) {
+    conn->hdr_list = curl_slist_append(conn->hdr_list, header.c_str());
+  }
+  curl_easy_setopt(easy, CURLOPT_HTTPHEADER, conn->hdr_list);
 
   auto rc = curl_multi_add_handle(global.multi, conn->easy);
   if (mcode_test("new_conn: curl_multi_add_handle", rc) < 0) {
@@ -311,6 +327,10 @@ void destroyConnection(ConnInfo_t *conn) {
   /* clean up the curl handle*/
   curl_multi_remove_handle(conn->global, conn->easy);
   curl_easy_cleanup(conn->easy);
+  if( conn->hdr_list ) {
+    curl_slist_free_all(conn->hdr_list);
+    conn->hdr_list = nullptr ;
+  }
 
   /* clear asio resources and free resources */
   if (conn->timer) {
@@ -329,6 +349,10 @@ void destroyConnection(ConnInfo_t *conn) {
 
   if (conn->url) {
     free(conn->url);
+  }
+
+  if (conn->body) {
+    free(conn->body);
   }
 
   if (conn->mutex) switch_mutex_lock(conn->mutex);
@@ -679,6 +703,8 @@ void restart_cb(const boost::system::error_code& error, ConnInfo_t* conn) {
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "restart_cb status is %s\n", status2String(conn->status));
   if (conn->status == Status_t::STATUS_AWAITING_RESTART) {
     auto url = strdup(conn->url);
+    auto body = strdup(conn->body);
+    auto headers = conn->headers;
     auto rate = conn->rate;
     auto loop = conn->loop;
     auto gain = conn->gain;
@@ -688,7 +714,7 @@ void restart_cb(const boost::system::error_code& error, ConnInfo_t* conn) {
 
     destroyConnection(conn);
 
-    downloadId_t id = start_audio_download(url, rate, loop, gain, mutex, buffer);
+    downloadId_t id = start_audio_download(url, body, headers, rate, loop, gain, mutex, buffer);
 
     /* re-use id since caller is tracking that id */
     auto * newConnection = id2ConnMap[id];
@@ -882,4 +908,3 @@ int close_socket(void *clientp, curl_socket_t item) {
   }
   return 0;
 }
-
