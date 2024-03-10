@@ -1,5 +1,6 @@
 #include "mod_dub.h"
 #include "audio_downloader.h"
+#include "tts_vendor_parser.h"
 #include "file_loader.h"
 
 #include <string>
@@ -76,7 +77,7 @@ extern "C" {
     }
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "play_dub_track: starting %s download: %s\n", (isHttp ? "HTTP" : "file"), url);
     int id = isHttp ?
-      start_audio_download(url, track->sampleRate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer) :
+      start_audio_download(url, nullptr, std::vector<std::string>{}, track->sampleRate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer) :
       start_file_load(url, track->sampleRate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer);
 
     if (id == INVALID_DOWNLOAD_ID) {
@@ -105,13 +106,21 @@ extern "C" {
      * here because it is so much faster.
      * 
      */
-
-    /*
+    std::string url;
+    std::string body;
+    std::vector<std::string> headers;
+    if (tts_vendor_parse_text(text, url, body, headers) != SWITCH_STATUS_SUCCESS) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "say_dub_track: failed to parse text\n");
+      return SWITCH_STATUS_FALSE;
+    }
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "say_dub_track: starting HTTP download: %s\n", url.c_str());
+    int id = start_audio_download(url.c_str(), body.c_str(), headers, track->sampleRate, 0/*loop*/,
+      gain, mutex, (CircularBuffer_t*) track->circularBuffer);
+    
     track->state = DUB_TRACK_STATE_ACTIVE;
     track->generatorId = id;
     track->generator = DUB_GENERATOR_TYPE_TTS;
     track->gain = gain;
-    */
     return SWITCH_STATUS_SUCCESS;
   }
 

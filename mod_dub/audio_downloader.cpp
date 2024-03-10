@@ -268,7 +268,9 @@ ConnInfo_t* createDownloader(const char *url, const char* body, std::vector<std:
   conn->gain = gain;
   conn->rate = rate;
   conn->url = strdup(url);
-  conn->body = strdup(body);
+  if (body) {
+    conn->body = strdup(body);
+  }
   conn->headers = headers;
   conn->hdr_list = NULL;
   conn->global = &global;

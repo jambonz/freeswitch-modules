@@ -8,6 +8,7 @@
 #include <switch.h>
 #include <switch_curl.h>
 #include "dub_glue.h"
+#include <string.h>
 
 /* Prototypes */
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_dub_shutdown);
@@ -267,17 +268,57 @@ static switch_status_t dub_say_on_track(switch_core_session_t *session, char* tr
   return status;
 }
 
+char* next_token(char** str_ptr, const char* delimiters) {
+  char* token_start;
+  char quote_char = '\0';
+  if (*str_ptr == NULL) {
+      return NULL;
+  }
+
+  token_start = *str_ptr;
+  while (**str_ptr != '\0') {
+      if (quote_char == '\0' && (**str_ptr == '\"' || **str_ptr == '\'')) {
+          // Start of a quoted argument
+          quote_char = **str_ptr;
+          token_start++;
+      } else if (quote_char != '\0' && **str_ptr == quote_char) {
+          // End of a quoted argument
+          quote_char = '\0';
+          **str_ptr = '\0';
+      } else if (quote_char == '\0' && strchr(delimiters, **str_ptr) != NULL) {
+          // Found a delimiter outside of quotes - this is the end of the current argument
+          break;
+      }
+      (*str_ptr)++;
+  }
+  if (**str_ptr != '\0') {
+      **str_ptr = '\0';
+      (*str_ptr)++;
+  }
+
+  return token_start;
+}
+
 #define DUB_API_SYNTAX "<uuid> [addTrack|removeTrack|silenceTrack|playOnTrack|sayOnTrack|setGain] track [url|text|gain] [gain] [loop]"
+#define MAX_PARAMS 6
 SWITCH_STANDARD_API(dub_function)
 {
-	char *mycmd = NULL, *argv[6] = { 0 };
+	char *mycmd = NULL, *argv[MAX_PARAMS] = { 0 };
 	int argc = 0;
   int error_written = 0;
 	switch_status_t status = SWITCH_STATUS_FALSE;
+  char *current_arg;
+  char* next_arg;
 
 	if (!zstr(cmd) && (mycmd = strdup(cmd))) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "dub_function: %s\n", mycmd);
-		argc = switch_separate_string(mycmd, ' ', argv, (sizeof(argv) / sizeof(argv[0])));
+    next_arg = mycmd;
+    current_arg = next_token(&next_arg, " ");
+
+    while (current_arg && argc < MAX_PARAMS) {
+      argv[argc++] = strdup(current_arg);
+      current_arg = next_token(&next_arg, " ");
+    }
 	}
 
   if (zstr(cmd) || argc < 3 || zstr(argv[0]) || zstr(argv[1]) || zstr(argv[2])) {
