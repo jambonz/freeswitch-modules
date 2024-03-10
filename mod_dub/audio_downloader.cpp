@@ -705,7 +705,7 @@ void restart_cb(const boost::system::error_code& error, ConnInfo_t* conn) {
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "restart_cb status is %s\n", status2String(conn->status));
   if (conn->status == Status_t::STATUS_AWAITING_RESTART) {
     auto url = strdup(conn->url);
-    auto body = strdup(conn->body);
+    auto body = conn->body ? strdup(conn->body) : nullptr;
     auto headers = conn->headers;
     auto rate = conn->rate;
     auto loop = conn->loop;
