@@ -31,7 +31,7 @@ struct elevenlabs_data {
   char *cache_filename;
 
 	int rate;
-  uint32_t samples_rate;
+  uint32_t sample_rate;
 
   void *conn;
 	FILE *file;

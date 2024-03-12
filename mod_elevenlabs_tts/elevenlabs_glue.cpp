@@ -821,7 +821,7 @@ extern "C" {
     CURL* easy = createEasyHandle();
 
     el->conn = (void *) conn ;
-    el->samples_rate = 0;
+    el->sample_rate = 0;
     conn->elevenlabs = el;
     conn->easy = easy;
     conn->global = &global;
@@ -838,7 +838,7 @@ extern "C" {
       switch_core_session_t *psession = switch_core_session_locate(el->session_id);
       switch_core_session_get_read_impl(psession, &read_impl);
       uint32_t samples_per_second = !strcasecmp(read_impl.iananame, "g722") ? read_impl.actual_samples_per_second : read_impl.samples_per_second;
-      el->samples_rate = samples_per_second;
+      el->sample_rate = samples_per_second;
       // elevenlabs output is PCMU 8000
       if (samples_per_second != 8000 /*Hz*/) {
         el->resampler = speex_resampler_init(1, 8000, samples_per_second, SWITCH_RESAMPLE_QUALITY, &err);
@@ -919,8 +919,8 @@ extern "C" {
         switch_mutex_unlock(el->mutex);
         return SWITCH_STATUS_SUCCESS;
       }
-      size_t size = el->samples_rate ?
-        std::min((*datalen/(2 * el->samples_rate / 8000)), cBuffer->size()) :
+      size_t size = el->sample_rate ?
+        std::min((*datalen/(2 * el->sample_rate / 8000)), cBuffer->size()) :
         std::min((*datalen/2), cBuffer->size());
       pcm_data.insert(pcm_data.end(), cBuffer->begin(), cBuffer->begin() + size);
       cBuffer->erase(cBuffer->begin(), cBuffer->begin() + size);
