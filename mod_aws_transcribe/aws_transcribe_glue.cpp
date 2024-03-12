@@ -326,8 +326,8 @@ static void *SWITCH_THREAD_FUNC aws_transcribe_thread(switch_thread_t *thread, v
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "transcribe_thread: Error allocating streamer\n");
 		return nullptr;
 	}
-	cb->streamer = pStreamer;
   if (!cb->vad) pStreamer->connect();
+	cb->streamer = pStreamer;
 	pStreamer->processData(); //blocks until done
 
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "transcribe_thread: stopping cb %p\n", (void *) cb);
@@ -512,7 +512,18 @@ extern "C" {
 
 			// close connection and get final responses
 			switch_mutex_lock(cb->mutex);
-			GStreamer* streamer = (GStreamer *) cb->streamer;
+			GStreamer* streamer;
+
+      // race condition: if we just started a transcribe at same instant, the spawned thread may not have had a chance to set the streamer
+      int i = 0;
+      do {
+        streamer = (GStreamer *) cb->streamer;
+        if (streamer) break;
+        switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, 
+          "aws_transcribe_session_stop: waiting for streamer to come online..%s\n", bugname);
+        switch_yield(10000); // wait 10ms
+      } while (i++ < 3);
+
 			if (streamer) {
 				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "aws_transcribe_session_stop: finish..%s\n", bugname);
 				streamer->finish();
