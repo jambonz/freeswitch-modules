@@ -119,7 +119,7 @@ extern "C" {
     
     track->state = DUB_TRACK_STATE_ACTIVE;
     track->generatorId = id;
-    track->generator = DUB_GENERATOR_TYPE_TTS;
+    track->generator = DUB_GENERATOR_TYPE_HTTP;
     track->gain = gain;
     return SWITCH_STATUS_SUCCESS;
   }

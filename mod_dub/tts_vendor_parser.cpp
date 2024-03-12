@@ -18,7 +18,7 @@ switch_status_t elevenlabs_parse_text(std::map<std::string, std::string> params,
   for (const auto& pair : params) {
     if (pair.first == "api_key") {
       api_key = pair.second;
-    } else if (pair.first == "voice_name") {
+    } else if (pair.first == "voice") {
       voice_name = pair.second;
     } else if (pair.first == "model_id") {
       model_id = pair.second;
