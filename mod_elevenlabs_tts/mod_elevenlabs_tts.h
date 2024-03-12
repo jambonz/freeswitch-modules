@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <speex/speex_resampler.h>
 
 struct elevenlabs_data {
   char *session_id;
@@ -30,6 +31,7 @@ struct elevenlabs_data {
   char *cache_filename;
 
 	int rate;
+  uint32_t sample_rate;
 
   void *conn;
 	FILE *file;
@@ -38,6 +40,7 @@ struct elevenlabs_data {
   int draining;
   int reads;
   int cache_audio;
+  SpeexResamplerState *resampler;
 };
 
 typedef struct elevenlabs_data elevenlabs_t;
