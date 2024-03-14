@@ -76,7 +76,6 @@ typedef struct
   char error[CURL_ERROR_SIZE]; // curl error buffer
   char *err_msg; // http server error message
   HttpPayload_t payload;
-  char* body;
   std::queue<HttpPayload_t>* cmdQueue;
   struct curl_slist *hdr_list;
   bool loop;
@@ -338,10 +337,6 @@ void destroyConnection(ConnInfo_t *conn) {
   if (conn->timer) {
     conn->timer->cancel();
     delete conn->timer;
-  }
-  if (conn->body) {
-    free(conn->body);
-    conn->body = nullptr;
   }
   if (conn->err_msg) {
     free(conn->err_msg);
