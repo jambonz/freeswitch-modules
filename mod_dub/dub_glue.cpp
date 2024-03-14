@@ -4,6 +4,7 @@
 #include "file_loader.h"
 
 #include <string>
+#include <queue>
 
 #include <switch.h>
 
@@ -21,6 +22,7 @@ extern "C" {
     track->trackName = strdup(trackName);
     track->sampleRate = sampleRate;
     track->circularBuffer = new CircularBuffer_t(INIT_BUFFER_SIZE);
+    track->cmdQueue = new std::queue<HttpPayload_t>;
   }
 
   switch_status_t silence_dub_track(dub_track_t *track) {
@@ -62,6 +64,11 @@ extern "C" {
     if (buffer) {
       delete buffer;
     }
+    auto cmdQueue = static_cast<std::queue<HttpPayload_t>*>(track->cmdQueue);
+    if (cmdQueue) {
+      delete cmdQueue;
+      track->cmdQueue = NULL;
+    }
     if (track->trackName) {
       free(track->trackName);
     }
@@ -72,12 +79,17 @@ extern "C" {
 
   switch_status_t play_dub_track(dub_track_t *track, switch_mutex_t *mutex, char* url, int loop, int gain) {
     bool isHttp = strncmp(url, "http", 4) == 0;
+    auto cmdQueue = static_cast<std::queue<HttpPayload_t>*>(track->cmdQueue);
+    HttpPayload_t payload;
+    payload.url = url;
     if (track->state != DUB_TRACK_STATE_READY) {
       silence_dub_track(track);
     }
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "play_dub_track: starting %s download: %s\n", (isHttp ? "HTTP" : "file"), url);
+
+    payload.url = url;
     int id = isHttp ?
-      start_audio_download(url, nullptr, std::vector<std::string>{}, track->sampleRate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer) :
+      start_audio_download(&payload, track->sampleRate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer, cmdQueue) :
       start_file_load(url, track->sampleRate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer);
 
     if (id == INVALID_DOWNLOAD_ID) {
@@ -93,29 +105,25 @@ extern "C" {
   }
 
   switch_status_t say_dub_track(dub_track_t *track, switch_mutex_t *mutex, char* text, int gain) {
-    if (track->state != DUB_TRACK_STATE_READY) {
-      silence_dub_track(track); // wait...shouldnt we queue says?
-    }
+
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "say_dub_track: starting TTS\n");
-    
-    /**
-     * TODO:
-     * This is not implemented yet.  We can play TTS using using the playOnSay function
-     * because jambonz can generate local audio files using TTS vendors.
-     * However, we should probably at least implement support for elevenlabs streaming api
-     * here because it is so much faster.
-     * 
-     */
-    std::string url;
-    std::string body;
-    std::vector<std::string> headers;
-    if (tts_vendor_parse_text(text, url, body, headers) != SWITCH_STATUS_SUCCESS) {
+    auto cmdQueue = static_cast<std::queue<HttpPayload_t>*>(track->cmdQueue);
+    HttpPayload_t payload;
+    if (tts_vendor_parse_text(text, payload) != SWITCH_STATUS_SUCCESS) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "say_dub_track: failed to parse text\n");
       return SWITCH_STATUS_FALSE;
     }
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "say_dub_track: starting HTTP download: %s\n", url.c_str());
-    int id = start_audio_download(url.c_str(), body.c_str(), headers, track->sampleRate, 0/*loop*/,
-      gain, mutex, (CircularBuffer_t*) track->circularBuffer);
+
+    if (track->state != DUB_TRACK_STATE_READY) {
+      // silence_dub_track(track); // wait...shouldnt we queue says?
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "say_dub_track: TTS is still playing, Put command into a queue\n");
+      cmdQueue->push(payload);
+      return SWITCH_STATUS_SUCCESS;
+    }
+
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "say_dub_track: starting HTTP download: %s\n", payload.url.c_str());
+    int id = start_audio_download(&payload, track->sampleRate, 0/*loop*/,
+      gain, mutex, (CircularBuffer_t*) track->circularBuffer, cmdQueue);
     
     track->state = DUB_TRACK_STATE_ACTIVE;
     track->generatorId = id;

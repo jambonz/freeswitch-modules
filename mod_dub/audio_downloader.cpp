@@ -13,6 +13,7 @@
 
 #include <map>
 
+
 #include <mpg123.h>
 
 #include <curl/curl.h>
@@ -74,9 +75,9 @@ typedef struct
   mpg123_handle *mh;
   char error[CURL_ERROR_SIZE]; // curl error buffer
   char *err_msg; // http server error message
-  char* url;
+  HttpPayload_t payload;
   char* body;
-  std::vector<std::string> headers;
+  std::queue<HttpPayload_t>* cmdQueue;
   struct curl_slist *hdr_list;
   bool loop;
   int rate;
@@ -98,8 +99,7 @@ static std::string fullDirPath;
 static std::thread worker_thread;
 
 /* forward declarations */
-static ConnInfo_t* createDownloader(const char *url, const char* body, std::vector<std::string> headers,
-  int rate, int loop, int gain, mpg123_handle *mhm, switch_mutex_t *mutex, CircularBuffer_t *buffer);
+static ConnInfo_t* createDownloader(HttpPayload_t* payload, int rate, int loop, int gain, mpg123_handle *mhm, switch_mutex_t *mutex, CircularBuffer_t *buffer, HttpPayloadQueue_t*cmdQueue);
 static CURL* createEasyHandle(void);
 static void destroyConnection(ConnInfo_t *conn);
 static void check_multi_info(GlobalInfo_t *g) ;
@@ -176,7 +176,8 @@ extern "C" {
     return SWITCH_STATUS_SUCCESS;
   }
 
-  downloadId_t start_audio_download(const char* url, const char* body, std::vector<std::string> headers, int rate, int loop, int gain, switch_mutex_t* mutex, CircularBuffer_t* buffer) {
+  downloadId_t start_audio_download(HttpPayload_t* payload, int rate,
+    int loop, int gain, switch_mutex_t* mutex, CircularBuffer_t* buffer, HttpPayloadQueue_t* cmdQueue) {
     int mhError = 0;
 
     /* allocate handle for mpeg decoding */
@@ -207,7 +208,7 @@ extern "C" {
       return INVALID_DOWNLOAD_ID;
     }
 
-    ConnInfo_t* conn = createDownloader(url, body, headers, rate, loop, gain, mh, mutex, buffer);
+    ConnInfo_t* conn = createDownloader(payload, rate, loop, gain, mh, mutex, buffer, cmdQueue);
     if (!conn) {
       return INVALID_DOWNLOAD_ID;
     }
@@ -234,7 +235,6 @@ extern "C" {
     /* past this point I shall not access either the mutex or the buffer provided */
     conn->mutex = nullptr;
     conn->buffer = nullptr;
-
     /* if download is in progress set status to cancel it during next call back */
     if (status == Status_t::STATUS_DOWNLOAD_PAUSED) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "stop_audio_download: resuming download %d so we can cancel it\n", id);
@@ -250,7 +250,7 @@ extern "C" {
 }
 
 /* internal */
-ConnInfo_t* createDownloader(const char *url, const char* body, std::vector<std::string> headers, int rate, int loop, int gain, mpg123_handle *mh, switch_mutex_t *mutex, CircularBuffer_t *buffer) {
+ConnInfo_t* createDownloader(HttpPayload_t* payload, int rate, int loop, int gain, mpg123_handle *mh, switch_mutex_t *mutex, CircularBuffer_t *buffer, HttpPayloadQueue_t* cmdQueue) {
   ConnInfo_t *conn = pool.malloc() ;
   CURL* easy = createEasyHandle();
 
@@ -267,15 +267,15 @@ ConnInfo_t* createDownloader(const char *url, const char* body, std::vector<std:
   conn->loop = loop;
   conn->gain = gain;
   conn->rate = rate;
-  conn->url = strdup(url);
-  if (body) {
-    conn->body = strdup(body);
-  }
-  conn->headers = headers;
   conn->hdr_list = NULL;
   conn->global = &global;
   conn->status = Status_t::STATUS_NONE; 
   conn->timer = new boost::asio::deadline_timer(io_service);
+  conn->cmdQueue = cmdQueue;
+  if (!payload->body.empty())
+    conn->payload.body = payload->body;
+  conn->payload.headers = payload->headers;
+  conn->payload.url = payload->url;
 
   downloadId_t id = ++currDownloadId;
   if (id == 0) id++;
@@ -283,7 +283,7 @@ ConnInfo_t* createDownloader(const char *url, const char* body, std::vector<std:
   id2ConnMap[id] = conn;
   conn->id = id;
 
-  curl_easy_setopt(easy, CURLOPT_URL, url);
+  curl_easy_setopt(easy, CURLOPT_URL, payload->url.c_str());
   curl_easy_setopt(easy, CURLOPT_HTTPGET, 1L);
   curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, write_cb);
   curl_easy_setopt(easy, CURLOPT_WRITEDATA, conn);
@@ -305,11 +305,11 @@ ConnInfo_t* createDownloader(const char *url, const char* body, std::vector<std:
   /* keep the speed down so we don't have to buffer large amounts*/
   curl_easy_setopt(easy, CURLOPT_MAX_RECV_SPEED_LARGE, (curl_off_t)31415);
   /*Add request body*/
-  if (conn->body) {
-    curl_easy_setopt(easy, CURLOPT_POSTFIELDS, conn->body);
+  if (!conn->payload.body.empty()) {
+    curl_easy_setopt(easy, CURLOPT_POSTFIELDS, conn->payload.body.c_str());
   }
   /*Add request headers*/
-  for(const auto& header : headers) {
+  for(const auto& header : conn->payload.headers) {
     conn->hdr_list = curl_slist_append(conn->hdr_list, header.c_str());
   }
   curl_easy_setopt(easy, CURLOPT_HTTPHEADER, conn->hdr_list);
@@ -339,6 +339,10 @@ void destroyConnection(ConnInfo_t *conn) {
     conn->timer->cancel();
     delete conn->timer;
   }
+  if (conn->body) {
+    free(conn->body);
+    conn->body = nullptr;
+  }
   if (conn->err_msg) {
     free(conn->err_msg);
   }
@@ -347,14 +351,6 @@ void destroyConnection(ConnInfo_t *conn) {
   if (conn->mh) {
     mpg123_close(conn->mh);
     mpg123_delete(conn->mh);
-  }
-
-  if (conn->url) {
-    free(conn->url);
-  }
-
-  if (conn->body) {
-    free(conn->body);
   }
 
   if (conn->mutex) switch_mutex_lock(conn->mutex);
@@ -413,7 +409,13 @@ void check_multi_info(GlobalInfo_t *g) {
       auto loop = conn->loop;
       auto gain = conn->gain;
       auto oldId = conn->id;
+      auto cmdQueue = conn->cmdQueue;
       bool restart = conn->loop && conn->status != Status_t::STATUS_STOPPING && response_code == 200;
+      if (!restart && !cmdQueue->empty() && conn->status != Status_t::STATUS_STOPPING) {
+        conn->payload = cmdQueue->front();
+        cmdQueue->pop();
+        restart = true;
+      }
 
       conn->response_code = response_code;
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "curl done, response code %d, status %s\n", response_code, status2String(conn->status));
@@ -425,8 +427,6 @@ void check_multi_info(GlobalInfo_t *g) {
         conn->status = Status_t::STATUS_AWAITING_RESTART;
         conn->timer->expires_from_now(boost::posix_time::millisec(1000));
         conn->timer->async_wait(boost::bind(&restart_cb, boost::placeholders::_1, conn));
-
-        //TODO: this seems to not be working from this callback; maybe start it from a timer callback?
       }
       else {
         destroyConnection(conn);
@@ -704,26 +704,24 @@ std::vector<int16_t> convert_mp3_to_linear(ConnInfo_t *conn, int8_t *data, size_
 void restart_cb(const boost::system::error_code& error, ConnInfo_t* conn) {
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "restart_cb status is %s\n", status2String(conn->status));
   if (conn->status == Status_t::STATUS_AWAITING_RESTART) {
-    auto url = strdup(conn->url);
-    auto body = conn->body ? strdup(conn->body) : nullptr;
-    auto headers = conn->headers;
+    auto payload = conn->payload;
     auto rate = conn->rate;
     auto loop = conn->loop;
     auto gain = conn->gain;
     auto mutex = conn->mutex;
     auto buffer = conn->buffer;
     auto oldId = conn->id;
+    auto cmdQueue = conn->cmdQueue;
 
     destroyConnection(conn);
 
-    downloadId_t id = start_audio_download(url, body, headers, rate, loop, gain, mutex, buffer);
+    downloadId_t id = start_audio_download(&payload, rate, loop, gain, mutex, buffer, cmdQueue);
 
     /* re-use id since caller is tracking that id */
     auto * newConnection = id2ConnMap[id];
     id2ConnMap[oldId] = newConnection;
     id2ConnMap.erase(id);
 
-    free(url);
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "restarted looped download\n");
   }
 }
@@ -766,7 +764,6 @@ size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
   int8_t *data = (int8_t *) ptr;
   size_t bytes_received = size * nmemb;
   std::vector<int16_t> pcm_data;
-  
   if (conn->status == Status_t::STATUS_STOPPING || conn->status == Status_t::STATUS_STOPPED || !conn->mutex || !conn->buffer) {
     if (conn->timer) conn->timer->cancel();
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
