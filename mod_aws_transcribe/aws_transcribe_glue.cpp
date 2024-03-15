@@ -326,8 +326,8 @@ static void *SWITCH_THREAD_FUNC aws_transcribe_thread(switch_thread_t *thread, v
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "transcribe_thread: Error allocating streamer\n");
 		return nullptr;
 	}
-	cb->streamer = pStreamer;
   if (!cb->vad) pStreamer->connect();
+	cb->streamer = pStreamer;
 	pStreamer->processData(); //blocks until done
 
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "transcribe_thread: stopping cb %p\n", (void *) cb);
