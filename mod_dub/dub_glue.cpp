@@ -116,7 +116,6 @@ extern "C" {
     }
 
     if (track->state != DUB_TRACK_STATE_READY) {
-      // silence_dub_track(track); // wait...shouldnt we queue says?
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "say_dub_track: TTS is still playing, Put command into a queue\n");
       cmdQueue->push(payload);
       return SWITCH_STATUS_SUCCESS;
