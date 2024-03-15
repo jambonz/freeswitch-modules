@@ -1,4 +1,5 @@
 #include "audio_downloader.h"
+#include "file_loader.h"
 
 #include <boost/thread.hpp>
 #include <boost/asio.hpp>
@@ -76,7 +77,7 @@ typedef struct
   char error[CURL_ERROR_SIZE]; // curl error buffer
   char *err_msg; // http server error message
   HttpPayload_t payload;
-  std::queue<HttpPayload_t>* cmdQueue;
+  dub_track_t* track;
   struct curl_slist *hdr_list;
   bool loop;
   int rate;
@@ -98,7 +99,7 @@ static std::string fullDirPath;
 static std::thread worker_thread;
 
 /* forward declarations */
-static ConnInfo_t* createDownloader(HttpPayload_t* payload, int rate, int loop, int gain, mpg123_handle *mhm, switch_mutex_t *mutex, CircularBuffer_t *buffer, HttpPayloadQueue_t*cmdQueue);
+static ConnInfo_t* createDownloader(HttpPayload_t* payload, int rate, int loop, int gain, mpg123_handle *mhm, switch_mutex_t *mutex, CircularBuffer_t *buffer, dub_track_t*cmdQueue);
 static CURL* createEasyHandle(void);
 static void destroyConnection(ConnInfo_t *conn);
 static void check_multi_info(GlobalInfo_t *g) ;
@@ -176,7 +177,7 @@ extern "C" {
   }
 
   downloadId_t start_audio_download(HttpPayload_t* payload, int rate,
-    int loop, int gain, switch_mutex_t* mutex, CircularBuffer_t* buffer, HttpPayloadQueue_t* cmdQueue) {
+    int loop, int gain, switch_mutex_t* mutex, CircularBuffer_t* buffer, dub_track_t* track) {
     int mhError = 0;
 
     /* allocate handle for mpeg decoding */
@@ -207,7 +208,7 @@ extern "C" {
       return INVALID_DOWNLOAD_ID;
     }
 
-    ConnInfo_t* conn = createDownloader(payload, rate, loop, gain, mh, mutex, buffer, cmdQueue);
+    ConnInfo_t* conn = createDownloader(payload, rate, loop, gain, mh, mutex, buffer, track);
     if (!conn) {
       return INVALID_DOWNLOAD_ID;
     }
@@ -249,7 +250,7 @@ extern "C" {
 }
 
 /* internal */
-ConnInfo_t* createDownloader(HttpPayload_t* payload, int rate, int loop, int gain, mpg123_handle *mh, switch_mutex_t *mutex, CircularBuffer_t *buffer, HttpPayloadQueue_t* cmdQueue) {
+ConnInfo_t* createDownloader(HttpPayload_t* payload, int rate, int loop, int gain, mpg123_handle *mh, switch_mutex_t *mutex, CircularBuffer_t *buffer, dub_track_t* track) {
   ConnInfo_t *conn = pool.malloc() ;
   CURL* easy = createEasyHandle();
 
@@ -270,7 +271,7 @@ ConnInfo_t* createDownloader(HttpPayload_t* payload, int rate, int loop, int gai
   conn->global = &global;
   conn->status = Status_t::STATUS_NONE; 
   conn->timer = new boost::asio::deadline_timer(io_service);
-  conn->cmdQueue = cmdQueue;
+  conn->track = track;
   if (!payload->body.empty())
     conn->payload.body = payload->body;
   conn->payload.headers = payload->headers;
@@ -404,10 +405,16 @@ void check_multi_info(GlobalInfo_t *g) {
       auto loop = conn->loop;
       auto gain = conn->gain;
       auto oldId = conn->id;
-      auto cmdQueue = conn->cmdQueue;
+      auto cmdQueue = static_cast<std::queue<HttpPayload_t>*> (conn->track->cmdQueue);
       bool restart = conn->loop && conn->status != Status_t::STATUS_STOPPING && response_code == 200;
+      // If this is not a loop audio, check if there is available command in the queue.
       if (!restart && !cmdQueue->empty() && conn->status != Status_t::STATUS_STOPPING) {
-        conn->payload = cmdQueue->front();
+        auto payload = cmdQueue->front();
+        conn->payload.url = payload.url;
+        conn->payload.headers = payload.headers;
+        if (!payload.body.empty()) {
+          conn->payload.body = payload.body;
+        }
         cmdQueue->pop();
         restart = true;
       }
@@ -706,11 +713,22 @@ void restart_cb(const boost::system::error_code& error, ConnInfo_t* conn) {
     auto mutex = conn->mutex;
     auto buffer = conn->buffer;
     auto oldId = conn->id;
-    auto cmdQueue = conn->cmdQueue;
+    auto track = conn->track;
 
     destroyConnection(conn);
 
-    downloadId_t id = start_audio_download(&payload, rate, loop, gain, mutex, buffer, cmdQueue);
+    bool isHttp = strncmp(payload.url.c_str(), "http", 4) == 0;
+    bool isSay = strncmp(payload.url.c_str(), "say:", 4) == 0;
+    // File loader is needed instead of http
+    if (!isHttp && !isSay) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Running to next command, but it's on local file, terminate myself and start file loader\n");
+      track->generatorId = start_file_load(payload.url.c_str(), track->sampleRate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer, track);
+      track->generator = DUB_GENERATOR_TYPE_FILE;
+      stop_audio_download(oldId);
+      return;
+    }
+
+    downloadId_t id = start_audio_download(&payload, rate, loop, gain, mutex, buffer, track);
 
     /* re-use id since caller is tracking that id */
     auto * newConnection = id2ConnMap[id];
