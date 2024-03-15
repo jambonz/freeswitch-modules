@@ -99,7 +99,7 @@ static std::string fullDirPath;
 static std::thread worker_thread;
 
 /* forward declarations */
-static ConnInfo_t* createDownloader(HttpPayload_t* payload, int rate, int loop, int gain, mpg123_handle *mhm, switch_mutex_t *mutex, CircularBuffer_t *buffer, dub_track_t*cmdQueue);
+static ConnInfo_t* createDownloader(HttpPayload_t* payload, int rate, int loop, int gain, mpg123_handle *mhm, switch_mutex_t *mutex, CircularBuffer_t *buffer, dub_track_t* track);
 static CURL* createEasyHandle(void);
 static void destroyConnection(ConnInfo_t *conn);
 static void check_multi_info(GlobalInfo_t *g) ;
