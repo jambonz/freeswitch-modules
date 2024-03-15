@@ -408,7 +408,7 @@ void check_multi_info(GlobalInfo_t *g) {
       auto cmdQueue = static_cast<std::queue<HttpPayload_t>*> (conn->track->cmdQueue);
       bool restart = conn->loop && conn->status != Status_t::STATUS_STOPPING && response_code == 200;
       // If this is not a loop audio, check if there is available command in the queue.
-      if (!restart && !cmdQueue->empty() && conn->status != Status_t::STATUS_STOPPING) {
+      if (!restart && conn->status != Status_t::STATUS_STOPPING && !cmdQueue->empty()) {
         auto payload = cmdQueue->front();
         conn->payload.url = payload.url;
         conn->payload.headers = payload.headers;

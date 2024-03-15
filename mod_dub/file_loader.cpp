@@ -352,7 +352,7 @@ std::vector<int16_t> convert_mp3_to_linear(FileInfo_t *finfo, int8_t *data, size
 }
 
 static void restart_cb(const boost::system::error_code& error, FileInfo_t* finfo) {
-  if (finfo->status == Status_t::STATUS_STOPPING) {
+  if (finfo->status == Status_t::STATUS_STOPPING || finfo->status == Status_t::STATUS_STOPPED) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "restart_cb: %u session gone\n", finfo->id);
     return;
   }
@@ -459,8 +459,10 @@ void read_cb(const boost::system::error_code& error, FileInfo_t* finfo) {
       }
     }
 
-    finfo->timer->expires_from_now(boost::posix_time::millisec(2000));
-    finfo->timer->async_wait(boost::bind( finfo->status != Status_t::STATUS_FILE_COMPLETE ? &read_cb : &restart_cb, boost::placeholders::_1, finfo));
+    if (finfo->status != Status_t::STATUS_STOPPING && finfo->status != Status_t::STATUS_STOPPED) {
+      finfo->timer->expires_from_now(boost::posix_time::millisec(2000));
+      finfo->timer->async_wait(boost::bind( finfo->status != Status_t::STATUS_FILE_COMPLETE ? &read_cb : &restart_cb, boost::placeholders::_1, finfo));
+    }
   } else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "read_cb: %u error (%d): %s\n", finfo->id, error.value(), error.message().c_str());
 
