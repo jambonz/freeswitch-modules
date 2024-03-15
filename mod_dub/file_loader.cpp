@@ -76,6 +76,7 @@ typedef struct
   FileType_t type;
   downloadId_t id;
   int gain;
+  dub_track_t* track;
 } FileInfo_t;
 
 typedef std::map<int32_t, FileInfo_t *> Id2FileMap_t;
@@ -87,11 +88,12 @@ static std::thread worker_thread;
 
 
 /* forward declarations */
-static FileInfo_t* createFileLoader(const char *path, int rate, int loop, int gain, mpg123_handle *mhm, switch_mutex_t *mutex, CircularBuffer_t *buffer);
+static FileInfo_t* createFileLoader(const char *path, int rate, int loop, int gain, mpg123_handle *mhm, switch_mutex_t *mutex, CircularBuffer_t *buffer, dub_track_t* track);
 static void destroyFileInfo(FileInfo_t *finfo);
 static void threadFunc();
 static std::vector<int16_t> convert_mp3_to_linear(FileInfo_t *file, int8_t *data, size_t len);
 static void read_cb(const boost::system::error_code& error, FileInfo_t* finfo) ;
+static void restart_cb(const boost::system::error_code& error, FileInfo_t* finfo) ;
 
 /* apis */
 extern "C" {
@@ -130,7 +132,7 @@ extern "C" {
     return SWITCH_STATUS_SUCCESS;
   }
 
-  downloadId_t start_file_load(const char* path, int rate, int loop, int gain, switch_mutex_t* mutex, CircularBuffer_t* buffer) {
+  downloadId_t start_file_load(const char* path, int rate, int loop, int gain, switch_mutex_t* mutex, CircularBuffer_t* buffer, dub_track_t* track) {
     int mhError = 0;
 
     /* we only handle mp3 or r8 files atm */
@@ -173,7 +175,7 @@ extern "C" {
       return INVALID_DOWNLOAD_ID;
     }
 
-    FileInfo_t* finfo = createFileLoader(path, rate, loop, gain, mh, mutex, buffer);
+    FileInfo_t* finfo = createFileLoader(path, rate, loop, gain, mh, mutex, buffer, track);
     if (!finfo) {
       return INVALID_DOWNLOAD_ID;
     }
@@ -212,7 +214,7 @@ extern "C" {
 }
 
 /* internal */
-FileInfo_t* createFileLoader(const char *path, int rate, int loop, int gain, mpg123_handle *mh, switch_mutex_t *mutex, CircularBuffer_t *buffer) {
+FileInfo_t* createFileLoader(const char *path, int rate, int loop, int gain, mpg123_handle *mh, switch_mutex_t *mutex, CircularBuffer_t *buffer, dub_track_t* track) {
   FileInfo_t *finfo = pool.malloc() ;
   const char *ext = strrchr(path, '.');
 
@@ -226,6 +228,7 @@ FileInfo_t* createFileLoader(const char *path, int rate, int loop, int gain, mpg
   finfo->path = strdup(path);
   finfo->status = Status_t::STATUS_NONE; 
   finfo->timer = new boost::asio::deadline_timer(io_service);
+  finfo->track = track;
 
   if (0 == strcmp(ext, "mp3")) finfo->type = FileType_t::FILE_TYPE_MP3;
   else if (0 == strcmp(ext, "r8")) finfo->type = FileType_t::FILE_TYPE_R8;
@@ -348,6 +351,48 @@ std::vector<int16_t> convert_mp3_to_linear(FileInfo_t *finfo, int8_t *data, size
   return linear_data;
 }
 
+static void restart_cb(const boost::system::error_code& error, FileInfo_t* finfo) {
+  if (finfo->status == Status_t::STATUS_STOPPING) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "restart_cb: %u session gone\n", finfo->id);
+    return;
+  }
+
+  auto cmdQueue = static_cast<std::queue<HttpPayload_t>*> (finfo->track->cmdQueue);
+  auto rate = finfo->rate;
+  auto loop = finfo->loop;
+  auto gain = finfo->gain;
+  auto mutex = finfo->mutex;
+  auto buffer = finfo->buffer;
+  auto oldId = finfo->id;
+  auto track = finfo->track;
+
+  if (loop) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "read_cb: %u looping\n", finfo->id);
+    ::fseek(finfo->fp, 0, SEEK_SET);
+    finfo->status = Status_t::STATUS_AWAITING_RESTART;
+    finfo->timer->expires_from_now(boost::posix_time::millisec(1));
+    finfo->timer->async_wait(boost::bind(&read_cb, boost::placeholders::_1, finfo));
+    return;
+  }
+
+  stop_file_load(oldId);
+
+  if (!cmdQueue->empty()) {
+    HttpPayload_t payload = cmdQueue->front();
+    cmdQueue->pop();
+
+    bool isHttp = strncmp(payload.url.c_str(), "http", 4) == 0;
+    bool isSay = strncmp(payload.url.c_str(), "say:", 4) == 0;
+    if (isHttp || isSay) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Running to next command, but it's on http, terminate myself and start audio downloader\n");
+      track->generatorId = start_audio_download(&payload, rate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer, track);
+      track->generator = DUB_GENERATOR_TYPE_HTTP;
+    } else {
+      track->generatorId = start_file_load(payload.url.c_str(), rate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer, track);
+    }
+  }
+}
+
 void read_cb(const boost::system::error_code& error, FileInfo_t* finfo) {
   if (finfo->status == Status_t::STATUS_STOPPING || !finfo->mutex || !finfo->buffer) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "read_cb: %u session gone\n", finfo->id);
@@ -414,21 +459,8 @@ void read_cb(const boost::system::error_code& error, FileInfo_t* finfo) {
       }
     }
 
-    if (finfo->status == Status_t::STATUS_FILE_COMPLETE && finfo->loop) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "read_cb: %u looping\n", finfo->id);
-      ::fseek(finfo->fp, 0, SEEK_SET);
-      finfo->status = Status_t::STATUS_AWAITING_RESTART;
-    }
-
-    if (finfo->status != Status_t::STATUS_FILE_COMPLETE) {
-      // read more in 2 seconds
-      finfo->timer->expires_from_now(boost::posix_time::millisec(2000));
-      finfo->timer->async_wait(boost::bind(&read_cb, boost::placeholders::_1, finfo));
-    }
-    else {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "read_cb: %u file complete, status %s loop %s\n", 
-        finfo->id, status2String(finfo->status), (finfo->loop ? "yes" : "no"));
-    }
+    finfo->timer->expires_from_now(boost::posix_time::millisec(2000));
+    finfo->timer->async_wait(boost::bind( finfo->status != Status_t::STATUS_FILE_COMPLETE ? &read_cb : &restart_cb, boost::placeholders::_1, finfo));
   } else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "read_cb: %u error (%d): %s\n", finfo->id, error.value(), error.message().c_str());
 

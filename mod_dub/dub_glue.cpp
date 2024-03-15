@@ -83,14 +83,15 @@ extern "C" {
     HttpPayload_t payload;
     payload.url = url;
     if (track->state != DUB_TRACK_STATE_READY) {
-      silence_dub_track(track);
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "play_dub_track: Audio is still playing, Put command into a queue\n");
+      cmdQueue->push(payload);
+      return SWITCH_STATUS_SUCCESS;
     }
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "play_dub_track: starting %s download: %s\n", (isHttp ? "HTTP" : "file"), url);
 
-    payload.url = url;
     int id = isHttp ?
-      start_audio_download(&payload, track->sampleRate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer, cmdQueue) :
-      start_file_load(url, track->sampleRate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer);
+      start_audio_download(&payload, track->sampleRate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer, track) :
+      start_file_load(url, track->sampleRate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer, track);
 
     if (id == INVALID_DOWNLOAD_ID) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "play_dub_track: failed to start audio download\n");
@@ -123,7 +124,7 @@ extern "C" {
 
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "say_dub_track: starting HTTP download: %s\n", payload.url.c_str());
     int id = start_audio_download(&payload, track->sampleRate, 0/*loop*/,
-      gain, mutex, (CircularBuffer_t*) track->circularBuffer, cmdQueue);
+      gain, mutex, (CircularBuffer_t*) track->circularBuffer, track);
     
     track->state = DUB_TRACK_STATE_ACTIVE;
     track->generatorId = id;
