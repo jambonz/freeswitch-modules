@@ -22,7 +22,7 @@ extern "C" {
     track->trackName = strdup(trackName);
     track->sampleRate = sampleRate;
     track->circularBuffer = new CircularBuffer_t(INIT_BUFFER_SIZE);
-    track->cmdQueue = new std::queue<HttpPayload_t>;
+    track->cmd_queue = new std::queue<HttpPayload_t>;
   }
 
   switch_status_t silence_dub_track(dub_track_t *track) {
@@ -64,10 +64,10 @@ extern "C" {
     if (buffer) {
       delete buffer;
     }
-    auto cmdQueue = static_cast<std::queue<HttpPayload_t>*>(track->cmdQueue);
-    if (cmdQueue) {
-      delete cmdQueue;
-      track->cmdQueue = NULL;
+    auto cmd_queue = static_cast<std::queue<HttpPayload_t>*>(track->cmd_queue);
+    if (cmd_queue) {
+      delete cmd_queue;
+      track->cmd_queue = NULL;
     }
     if (track->trackName) {
       free(track->trackName);
@@ -79,19 +79,19 @@ extern "C" {
 
   switch_status_t play_dub_track(dub_track_t *track, switch_mutex_t *mutex, char* url, int loop, int gain) {
     bool isHttp = strncmp(url, "http", 4) == 0;
-    auto cmdQueue = static_cast<std::queue<HttpPayload_t>*>(track->cmdQueue);
+    auto cmd_queue = static_cast<std::queue<HttpPayload_t>*>(track->cmd_queue);
     HttpPayload_t payload;
     payload.url = url;
     if (track->state != DUB_TRACK_STATE_READY) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "play_dub_track: Audio is still playing, Put command into a queue\n");
-      cmdQueue->push(payload);
+      cmd_queue->push(payload);
       return SWITCH_STATUS_SUCCESS;
     }
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "play_dub_track: starting %s download: %s\n", (isHttp ? "HTTP" : "file"), url);
 
     int id = isHttp ?
-      start_audio_download(&payload, track->sampleRate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer, track) :
-      start_file_load(url, track->sampleRate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer, track);
+      start_audio_download(&payload, track->sampleRate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer, cmd_queue, &track->generator, &track->generatorId) :
+      start_file_load(url, track->sampleRate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer, cmd_queue, &track->generator, &track->generatorId);
 
     if (id == INVALID_DOWNLOAD_ID) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "play_dub_track: failed to start audio download\n");
@@ -108,7 +108,7 @@ extern "C" {
   switch_status_t say_dub_track(dub_track_t *track, switch_mutex_t *mutex, char* text, int gain) {
 
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "say_dub_track: starting TTS\n");
-    auto cmdQueue = static_cast<std::queue<HttpPayload_t>*>(track->cmdQueue);
+    auto cmd_queue = static_cast<std::queue<HttpPayload_t>*>(track->cmd_queue);
     HttpPayload_t payload;
     if (tts_vendor_parse_text(text, payload) != SWITCH_STATUS_SUCCESS) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "say_dub_track: failed to parse text\n");
@@ -117,13 +117,13 @@ extern "C" {
 
     if (track->state != DUB_TRACK_STATE_READY) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "say_dub_track: TTS is still playing, Put command into a queue\n");
-      cmdQueue->push(payload);
+      cmd_queue->push(payload);
       return SWITCH_STATUS_SUCCESS;
     }
 
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "say_dub_track: starting HTTP download: %s\n", payload.url.c_str());
     int id = start_audio_download(&payload, track->sampleRate, 0/*loop*/,
-      gain, mutex, (CircularBuffer_t*) track->circularBuffer, track);
+      gain, mutex, (CircularBuffer_t*) track->circularBuffer, cmd_queue, &track->generator, &track->generatorId);
     
     track->state = DUB_TRACK_STATE_ACTIVE;
     track->generatorId = id;
