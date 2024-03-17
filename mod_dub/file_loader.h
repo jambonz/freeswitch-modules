@@ -11,7 +11,8 @@ extern "C" {
 switch_status_t init_file_loader();
 switch_status_t deinit_file_loader();
 
-int start_file_load(const char* path, int rate, int loop, int gain, switch_mutex_t* mutex, CircularBuffer_t* buffer, dub_track_t* track);
+int start_file_load(const char* path, int rate, int loop, int gain, switch_mutex_t* mutex, CircularBuffer_t* buffer,
+  std::queue<HttpPayload_t>* cmd_queue, dub_generator_t* generator, int* generatorId);
 switch_status_t stop_file_load(int id);
 
 }
