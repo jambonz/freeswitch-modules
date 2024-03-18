@@ -386,9 +386,9 @@ static void restart_cb(const boost::system::error_code& error, FileInfo_t* finfo
     return;
   }
 
-  stop_file_load(oldId);
-
   if (!cmd_queue->empty()) {
+    // close the current file loader, and initiate new worker for new URL.
+    stop_file_load(oldId);
     HttpPayload_t payload = cmd_queue->front();
     cmd_queue->pop();
 
