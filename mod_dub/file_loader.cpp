@@ -389,17 +389,17 @@ static void restart_cb(const boost::system::error_code& error, FileInfo_t* finfo
   if (!req_queue->empty()) {
     // close the current file loader, and initiate new worker for new URL.
     stop_file_load(oldId);
-    request_t payload = req_queue->front();
+    request_t req = req_queue->front();
     req_queue->pop();
 
-    bool isHttp = strncmp(payload.url.c_str(), "http", 4) == 0;
-    bool isSay = strncmp(payload.url.c_str(), "say:", 4) == 0;
+    bool isHttp = strncmp(req.url.c_str(), "http", 4) == 0;
+    bool isSay = strncmp(req.url.c_str(), "say:", 4) == 0;
     if (isHttp || isSay) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Running to next command, but it's on http, terminate myself and start audio downloader\n");
-      *generatorId = start_audio_download(&payload, rate, loop, gain, mutex, buffer, req_queue, generator, generatorId);
+      *generatorId = start_audio_download(&req, rate, loop, gain, mutex, buffer, req_queue, generator, generatorId);
       *generator = DUB_GENERATOR_TYPE_HTTP;
     } else {
-      *generatorId = start_file_load(payload.url.c_str(), rate, loop, gain, mutex, buffer, req_queue, generator, generatorId);
+      *generatorId = start_file_load(req.url.c_str(), rate, loop, gain, mutex, buffer, req_queue, generator, generatorId);
     }
   }
 }

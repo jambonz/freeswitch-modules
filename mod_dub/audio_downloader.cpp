@@ -76,7 +76,7 @@ typedef struct
   mpg123_handle *mh;
   char error[CURL_ERROR_SIZE]; // curl error buffer
   char *err_msg; // http server error message
-  request_t payload;
+  request_t req;
   request_queue_t* req_queue;
   int* generatorId;
   dub_generator_t* generator;
@@ -101,7 +101,7 @@ static std::string fullDirPath;
 static std::thread worker_thread;
 
 /* forward declarations */
-static ConnInfo_t* createDownloader(request_t* payload, int rate, int loop, int gain, mpg123_handle *mhm, switch_mutex_t *mutex,
+static ConnInfo_t* createDownloader(request_t* req, int rate, int loop, int gain, mpg123_handle *mhm, switch_mutex_t *mutex,
   CircularBuffer_t *buffer, request_queue_t* req_queue, dub_generator_t* generator, int* generator_id);
 static CURL* createEasyHandle(void);
 static void destroyConnection(ConnInfo_t *conn);
@@ -179,7 +179,7 @@ extern "C" {
     return SWITCH_STATUS_SUCCESS;
   }
 
-  downloadId_t start_audio_download(request_t* payload, int rate, int loop, int gain, switch_mutex_t* mutex, CircularBuffer_t* buffer,
+  downloadId_t start_audio_download(request_t* req, int rate, int loop, int gain, switch_mutex_t* mutex, CircularBuffer_t* buffer,
     request_queue_t* req_queue, dub_generator_t* generator, int* generator_id) {
     int mhError = 0;
 
@@ -211,7 +211,7 @@ extern "C" {
       return INVALID_DOWNLOAD_ID;
     }
 
-    ConnInfo_t* conn = createDownloader(payload, rate, loop, gain, mh, mutex, buffer, req_queue, generator, generator_id);
+    ConnInfo_t* conn = createDownloader(req, rate, loop, gain, mh, mutex, buffer, req_queue, generator, generator_id);
     if (!conn) {
       return INVALID_DOWNLOAD_ID;
     }
@@ -256,7 +256,7 @@ extern "C" {
 }
 
 /* internal */
-ConnInfo_t* createDownloader(request_t* payload, int rate, int loop, int gain, mpg123_handle *mh, switch_mutex_t *mutex, CircularBuffer_t *buffer,
+ConnInfo_t* createDownloader(request_t* req, int rate, int loop, int gain, mpg123_handle *mh, switch_mutex_t *mutex, CircularBuffer_t *buffer,
   request_queue_t* req_queue, dub_generator_t* generator, int* generator_id) {
   ConnInfo_t *conn = pool.malloc() ;
   CURL* easy = createEasyHandle();
@@ -281,10 +281,10 @@ ConnInfo_t* createDownloader(request_t* payload, int rate, int loop, int gain, m
   conn->req_queue = req_queue;
   conn->generator = generator;
   conn->generatorId = generator_id;
-  if (!payload->body.empty())
-    conn->payload.body = payload->body;
-  conn->payload.headers = payload->headers;
-  conn->payload.url = payload->url;
+  if (!req->body.empty())
+    conn->req.body = req->body;
+  conn->req.headers = req->headers;
+  conn->req.url = req->url;
 
   downloadId_t id = ++currDownloadId;
   if (id == 0) id++;
@@ -292,7 +292,7 @@ ConnInfo_t* createDownloader(request_t* payload, int rate, int loop, int gain, m
   id2ConnMap[id] = conn;
   conn->id = id;
 
-  curl_easy_setopt(easy, CURLOPT_URL, payload->url.c_str());
+  curl_easy_setopt(easy, CURLOPT_URL, req->url.c_str());
   curl_easy_setopt(easy, CURLOPT_HTTPGET, 1L);
   curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, write_cb);
   curl_easy_setopt(easy, CURLOPT_WRITEDATA, conn);
@@ -314,11 +314,11 @@ ConnInfo_t* createDownloader(request_t* payload, int rate, int loop, int gain, m
   /* keep the speed down so we don't have to buffer large amounts*/
   curl_easy_setopt(easy, CURLOPT_MAX_RECV_SPEED_LARGE, (curl_off_t)31415);
   /*Add request body*/
-  if (!conn->payload.body.empty()) {
-    curl_easy_setopt(easy, CURLOPT_POSTFIELDS, conn->payload.body.c_str());
+  if (!conn->req.body.empty()) {
+    curl_easy_setopt(easy, CURLOPT_POSTFIELDS, conn->req.body.c_str());
   }
   /*Add request headers*/
-  for(const auto& header : conn->payload.headers) {
+  for(const auto& header : conn->req.headers) {
     conn->hdr_list = curl_slist_append(conn->hdr_list, header.c_str());
   }
   curl_easy_setopt(easy, CURLOPT_HTTPHEADER, conn->hdr_list);
@@ -418,11 +418,11 @@ void check_multi_info(GlobalInfo_t *g) {
       bool restart = conn->loop && conn->status != Status_t::STATUS_STOPPING && response_code == 200;
       // If this is not a loop audio, check if there is available command in the queue.
       if (!restart && conn->status != Status_t::STATUS_STOPPING && !req_queue->empty()) {
-        auto payload = req_queue->front();
-        conn->payload.url = payload.url;
-        conn->payload.headers = payload.headers;
-        if (!payload.body.empty()) {
-          conn->payload.body = payload.body;
+        auto req = req_queue->front();
+        conn->req.url = req.url;
+        conn->req.headers = req.headers;
+        if (!req.body.empty()) {
+          conn->req.body = req.body;
         }
         req_queue->pop();
         restart = true;
@@ -715,7 +715,7 @@ std::vector<int16_t> convert_mp3_to_linear(ConnInfo_t *conn, int8_t *data, size_
 void restart_cb(const boost::system::error_code& error, ConnInfo_t* conn) {
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "restart_cb status is %s\n", status2String(conn->status));
   if (conn->status == Status_t::STATUS_AWAITING_RESTART) {
-    auto payload = conn->payload;
+    auto req = conn->req;
     auto rate = conn->rate;
     auto loop = conn->loop;
     auto gain = conn->gain;
@@ -728,18 +728,18 @@ void restart_cb(const boost::system::error_code& error, ConnInfo_t* conn) {
 
     destroyConnection(conn);
 
-    bool isHttp = strncmp(payload.url.c_str(), "http", 4) == 0;
-    bool isSay = strncmp(payload.url.c_str(), "say:", 4) == 0;
+    bool isHttp = strncmp(req.url.c_str(), "http", 4) == 0;
+    bool isSay = strncmp(req.url.c_str(), "say:", 4) == 0;
     // File loader is needed instead of http
     if (!isHttp && !isSay) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Running to next command, but it's on local file, terminate myself and start file loader\n");
-      *generatorId = start_file_load(payload.url.c_str(), rate, loop, gain, mutex, buffer, req_queue, generator, generatorId);
+      *generatorId = start_file_load(req.url.c_str(), rate, loop, gain, mutex, buffer, req_queue, generator, generatorId);
       *generator = DUB_GENERATOR_TYPE_FILE;
       stop_audio_download(oldId);
       return;
     }
 
-    downloadId_t id = start_audio_download(&payload, rate, loop, gain, mutex, buffer, req_queue, generator, generatorId);
+    downloadId_t id = start_audio_download(&req, rate, loop, gain, mutex, buffer, req_queue, generator, generatorId);
 
     /* re-use id since caller is tracking that id */
     auto * newConnection = id2ConnMap[id];

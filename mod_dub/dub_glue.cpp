@@ -80,17 +80,17 @@ extern "C" {
   switch_status_t play_dub_track(dub_track_t *track, switch_mutex_t *mutex, char* url, int loop, int gain) {
     bool isHttp = strncmp(url, "http", 4) == 0;
     auto req_queue = static_cast<request_queue_t*>(track->req_queue);
-    request_t payload;
-    payload.url = url;
+    request_t req;
+    req.url = url;
     if (track->state != DUB_TRACK_STATE_READY) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "play_dub_track: Audio is still playing, Put command into a queue\n");
-      req_queue->push(payload);
+      req_queue->push(req);
       return SWITCH_STATUS_SUCCESS;
     }
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "play_dub_track: starting %s download: %s\n", (isHttp ? "HTTP" : "file"), url);
 
     int id = isHttp ?
-      start_audio_download(&payload, track->sampleRate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer, req_queue, &track->generator, &track->generatorId) :
+      start_audio_download(&req, track->sampleRate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer, req_queue, &track->generator, &track->generatorId) :
       start_file_load(url, track->sampleRate, loop, gain, mutex, (CircularBuffer_t*) track->circularBuffer, req_queue, &track->generator, &track->generatorId);
 
     if (id == INVALID_DOWNLOAD_ID) {
@@ -109,20 +109,20 @@ extern "C" {
 
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "say_dub_track: starting TTS\n");
     auto req_queue = static_cast<request_queue_t*>(track->req_queue);
-    request_t payload;
-    if (tts_vendor_parse_text(text, payload) != SWITCH_STATUS_SUCCESS) {
+    request_t req;
+    if (tts_vendor_parse_text(text, req) != SWITCH_STATUS_SUCCESS) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "say_dub_track: failed to parse text\n");
       return SWITCH_STATUS_FALSE;
     }
 
     if (track->state != DUB_TRACK_STATE_READY) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "say_dub_track: TTS is still playing, Put command into a queue\n");
-      req_queue->push(payload);
+      req_queue->push(req);
       return SWITCH_STATUS_SUCCESS;
     }
 
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "say_dub_track: starting HTTP download: %s\n", payload.url.c_str());
-    int id = start_audio_download(&payload, track->sampleRate, 0/*loop*/,
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "say_dub_track: starting HTTP download: %s\n", req.url.c_str());
+    int id = start_audio_download(&req, track->sampleRate, 0/*loop*/,
       gain, mutex, (CircularBuffer_t*) track->circularBuffer, req_queue, &track->generator, &track->generatorId);
     
     track->state = DUB_TRACK_STATE_ACTIVE;
