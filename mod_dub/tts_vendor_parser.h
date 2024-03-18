@@ -6,6 +6,6 @@
 #include "common.h"
 
 
-switch_status_t tts_vendor_parse_text(const std::string& say, request_t& payload);
+switch_status_t tts_vendor_parse_text(const std::string& say, request_t& req);
 
 #endif
