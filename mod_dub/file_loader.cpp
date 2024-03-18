@@ -76,7 +76,7 @@ typedef struct
   FileType_t type;
   downloadId_t id;
   int gain;
-  std::queue<HttpPayload_t>* cmd_queue;
+  request_queue_t* req_queue;
   int* generatorId;
   dub_generator_t* generator;
 } FileInfo_t;
@@ -91,7 +91,7 @@ static std::thread worker_thread;
 
 /* forward declarations */
 static FileInfo_t* createFileLoader(const char *path, int rate, int loop, int gain, mpg123_handle *mhm, switch_mutex_t *mutex, CircularBuffer_t *buffer,
-  std::queue<HttpPayload_t>* cmd_queue, dub_generator_t* generator, int* generatorId);
+  request_queue_t* req_queue, dub_generator_t* generator, int* generatorId);
 static void destroyFileInfo(FileInfo_t *finfo);
 static void threadFunc();
 static std::vector<int16_t> convert_mp3_to_linear(FileInfo_t *file, int8_t *data, size_t len);
@@ -136,7 +136,7 @@ extern "C" {
   }
 
   downloadId_t start_file_load(const char* path, int rate, int loop, int gain, switch_mutex_t* mutex, CircularBuffer_t* buffer, 
-    std::queue<HttpPayload_t>* cmd_queue, dub_generator_t* generator, int* generatorId) {
+    request_queue_t* req_queue, dub_generator_t* generator, int* generatorId) {
     int mhError = 0;
 
     /* we only handle mp3 or r8 files atm */
@@ -179,7 +179,7 @@ extern "C" {
       return INVALID_DOWNLOAD_ID;
     }
 
-    FileInfo_t* finfo = createFileLoader(path, rate, loop, gain, mh, mutex, buffer, cmd_queue, generator, generatorId);
+    FileInfo_t* finfo = createFileLoader(path, rate, loop, gain, mh, mutex, buffer, req_queue, generator, generatorId);
     if (!finfo) {
       return INVALID_DOWNLOAD_ID;
     }
@@ -209,7 +209,7 @@ extern "C" {
     /* past this point I shall not access either the mutex or the buffer provided */
     finfo->mutex = nullptr;
     finfo->buffer = nullptr;
-    finfo->cmd_queue = nullptr;
+    finfo->req_queue = nullptr;
     finfo->generator = nullptr;
     finfo->generatorId = nullptr;
 
@@ -222,7 +222,7 @@ extern "C" {
 
 /* internal */
 FileInfo_t* createFileLoader(const char *path, int rate, int loop, int gain, mpg123_handle *mh, switch_mutex_t *mutex, CircularBuffer_t *buffer,
-  std::queue<HttpPayload_t>* cmd_queue, dub_generator_t* generator, int* generatorId) {
+  request_queue_t* req_queue, dub_generator_t* generator, int* generatorId) {
   FileInfo_t *finfo = pool.malloc() ;
   const char *ext = strrchr(path, '.');
 
@@ -236,7 +236,7 @@ FileInfo_t* createFileLoader(const char *path, int rate, int loop, int gain, mpg
   finfo->path = strdup(path);
   finfo->status = Status_t::STATUS_NONE; 
   finfo->timer = new boost::asio::deadline_timer(io_service);
-  finfo->cmd_queue = cmd_queue;
+  finfo->req_queue = req_queue;
   finfo->generator = generator;
   finfo->generatorId = generatorId;
 
@@ -367,7 +367,7 @@ static void restart_cb(const boost::system::error_code& error, FileInfo_t* finfo
     return;
   }
 
-  auto cmd_queue = finfo->cmd_queue;
+  auto req_queue = finfo->req_queue;
   auto rate = finfo->rate;
   auto loop = finfo->loop;
   auto gain = finfo->gain;
@@ -386,20 +386,20 @@ static void restart_cb(const boost::system::error_code& error, FileInfo_t* finfo
     return;
   }
 
-  if (!cmd_queue->empty()) {
+  if (!req_queue->empty()) {
     // close the current file loader, and initiate new worker for new URL.
     stop_file_load(oldId);
-    HttpPayload_t payload = cmd_queue->front();
-    cmd_queue->pop();
+    request_t payload = req_queue->front();
+    req_queue->pop();
 
     bool isHttp = strncmp(payload.url.c_str(), "http", 4) == 0;
     bool isSay = strncmp(payload.url.c_str(), "say:", 4) == 0;
     if (isHttp || isSay) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Running to next command, but it's on http, terminate myself and start audio downloader\n");
-      *generatorId = start_audio_download(&payload, rate, loop, gain, mutex, buffer, cmd_queue, generator, generatorId);
+      *generatorId = start_audio_download(&payload, rate, loop, gain, mutex, buffer, req_queue, generator, generatorId);
       *generator = DUB_GENERATOR_TYPE_HTTP;
     } else {
-      *generatorId = start_file_load(payload.url.c_str(), rate, loop, gain, mutex, buffer, cmd_queue, generator, generatorId);
+      *generatorId = start_file_load(payload.url.c_str(), rate, loop, gain, mutex, buffer, req_queue, generator, generatorId);
     }
   }
 }

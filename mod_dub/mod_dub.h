@@ -42,7 +42,7 @@ typedef enum {
 typedef struct dub_track {
   dub_state_t state;
   dub_generator_t generator;
-  void* cmd_queue;
+  void* req_queue;
   char* trackName;
   int sampleRate;
   int gain;

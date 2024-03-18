@@ -4,7 +4,7 @@
 #include <switch_json.h>
 #include <map>
 
-switch_status_t elevenlabs_parse_text(std::map<std::string, std::string> params, std::string text,  HttpPayload_t& payload) {
+switch_status_t elevenlabs_parse_text(std::map<std::string, std::string> params, std::string text,  request_t& payload) {
   std::string api_key;
   std::string voice_name;
   std::string model_id;
@@ -85,7 +85,7 @@ switch_status_t elevenlabs_parse_text(std::map<std::string, std::string> params,
   return SWITCH_STATUS_SUCCESS;
 }
 
-switch_status_t tts_vendor_parse_text(const std::string& say, HttpPayload_t& payload) {
+switch_status_t tts_vendor_parse_text(const std::string& say, request_t& payload) {
   // Parse Say string
   size_t start = say.find("{") + 1;
   size_t end = say.find("}");
