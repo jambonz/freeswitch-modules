@@ -4,7 +4,9 @@
 #include <switch_json.h>
 #include <map>
 
-switch_status_t elevenlabs_parse_text(std::map<std::string, std::string> params, std::string text,  request_t& req) {
+switch_status_t elevenlabs_parse_text(const std::map<std::string, std::string>& params, const std::string& text, 
+  std::string& url, std::string& body, std::vector<std::string>& headers) {
+
   std::string api_key;
   std::string voice_name;
   std::string model_id;
@@ -50,7 +52,7 @@ switch_status_t elevenlabs_parse_text(std::map<std::string, std::string> params,
   std::ostringstream url_stream;
   url_stream << "https://api.elevenlabs.io/v1/text-to-speech/" << voice_name << "/stream?";
   url_stream << "optimize_streaming_latency=" << optimize_streaming_latency << "&output_format=mp3_44100_128";
-  req.url = url_stream.str();
+  url = url_stream.str();
 
   /* create the JSON body */
   cJSON * jResult = cJSON_CreateObject();
@@ -72,21 +74,20 @@ switch_status_t elevenlabs_parse_text(std::map<std::string, std::string> params,
       cJSON_AddStringToObject(jVoiceSettings, "stability", stability.c_str());
     }
   }
-  char* body = cJSON_PrintUnformatted(jResult);
-  req.body = body;
-  free(body);
+  char* _body = cJSON_PrintUnformatted(jResult);
+  body = _body;
+
+  cJSON_Delete(jResult);
+  free(_body);
 
   // Create headers
-  std::ostringstream api_key_stream;
-  api_key_stream << "xi-api-key: " << api_key;
-  req.headers.push_back(api_key_stream.str());
-  req.headers.push_back("Content-Type: application/json");
+  headers.push_back("xi-api-key: " + api_key);
+  headers.push_back("Content-Type: application/json");
 
   return SWITCH_STATUS_SUCCESS;
 }
 
-switch_status_t tts_vendor_parse_text(const std::string& say, request_t& req) {
-  // Parse Say string
+switch_status_t tts_vendor_parse_text(const std::string& say, std::string& url, std::string& body, std::vector<std::string>& headers) {
   size_t start = say.find("{") + 1;
   size_t end = say.find("}");
 
@@ -109,7 +110,7 @@ switch_status_t tts_vendor_parse_text(const std::string& say, request_t& req) {
   }
 
   if (params["vendor"] == "elevenlabs") {
-    return elevenlabs_parse_text(params, text, req);
+    return elevenlabs_parse_text(params, text, url, body, headers);
   } else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "tts_vendor_parse_text: There is no available parser for text\n");
     return SWITCH_STATUS_FALSE;
