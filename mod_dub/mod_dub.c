@@ -103,25 +103,19 @@ static switch_status_t dub_add_track(switch_core_session_t *session, char* track
     cb =(struct cap_cb *) switch_core_session_alloc(session, sizeof(struct cap_cb));
     memset(cb, 0, sizeof(struct cap_cb));
     switch_mutex_init(&cb->mutex, SWITCH_MUTEX_NESTED, switch_core_session_get_pool(session));    
-    offset = 0;
   }
   else {
     /* retrieve the bug and search for an empty track */
     cb = (struct cap_cb *) switch_core_media_bug_get_user_data(bug);
-    while (offset < MAX_DUB_TRACKS && cb->tracks[offset].state != DUB_TRACK_STATE_INACTIVE) {
-      offset++;
-    }
-    if (offset == MAX_DUB_TRACKS) {
-      /* all tracks are in use */
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "dub_add_track: no available tracks\n");
-      return SWITCH_STATUS_FALSE;
-    }
   }
 
   switch_core_session_get_write_impl(session, &write_impl);
 	samples_per_second = !strcasecmp(write_impl.iananame, "g722") ? write_impl.actual_samples_per_second : write_impl.samples_per_second;
 
-  init_dub_track(&cb->tracks[offset], trackName, samples_per_second);
+  if (add_track(cb, trackName, samples_per_second) != SWITCH_STATUS_SUCCESS) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "dub_add_track: error adding track %s\n", trackName);
+    return SWITCH_STATUS_FALSE;
+  }
 
   if (!bug) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "dub_add_track: adding bug for track %s\n", trackName);
@@ -141,39 +135,14 @@ static switch_status_t dub_remove_track(switch_core_session_t *session, char* tr
   switch_channel_t *channel = switch_core_session_get_channel(session);
   switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, MY_BUG_NAME);
   switch_status_t status = SWITCH_STATUS_FALSE;
-  dub_track_t *track = NULL;
   
   if (bug) {
     struct cap_cb *cb =(struct cap_cb *) switch_core_media_bug_get_user_data(bug);
-    switch_mutex_lock(cb->mutex);
-    for (int i = 0; i < MAX_DUB_TRACKS && track == NULL; i++) {
-      if (cb->tracks[i].state != DUB_TRACK_STATE_INACTIVE && strcmp(cb->tracks[i].trackName, trackName) == 0) {
-        track = &cb->tracks[i];
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "dub_remove_track: removing track %s at offset %d\n", trackName, i);
-        break;
-      }
+    status = remove_dub_track(cb, trackName);
+    if (status != SWITCH_STATUS_SUCCESS) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "dub_remove_track: error removing track %s\n", trackName);
+      return SWITCH_STATUS_FALSE;
     }
-
-    if (track) {
-      int count = 0;
-
-      remove_dub_track(track);
-
-      /* check if this is the last bug */
-      for (int i = 0; i < MAX_DUB_TRACKS; i++) {
-        if (cb->tracks[i].state != DUB_TRACK_STATE_INACTIVE) count++;
-      }
- 
-      if (count == 0) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "dub_remove_track: removing bug after removing last track\n");
-        dub_session_cleanup(session, 0, bug);
-      }
-      status = SWITCH_STATUS_SUCCESS;
-    }
-    else {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "dub_remove_track: track %s not found\n", trackName);
-    }
-    switch_mutex_unlock(cb->mutex);
   }
   else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "dub_remove_track: bug not found\n");
@@ -186,24 +155,14 @@ static switch_status_t dub_silence_track(switch_core_session_t *session, char* t
   switch_channel_t *channel = switch_core_session_get_channel(session);
   switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, MY_BUG_NAME);
   switch_status_t status = SWITCH_STATUS_FALSE;
-  dub_track_t *track = NULL;
   
   if (bug) {
     struct cap_cb *cb =(struct cap_cb *) switch_core_media_bug_get_user_data(bug);
-    switch_mutex_lock(cb->mutex);
-    for (int i = 0; i < MAX_DUB_TRACKS; i++) {
-      if (cb->tracks[i].state != DUB_TRACK_STATE_INACTIVE && strcmp(cb->tracks[i].trackName, trackName) == 0) {
-        track = &cb->tracks[i];
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "dub_silence_track: silencing track %s at offset %d\n", trackName, i);
-        break;
-      }
+    status = silence_dub_track(cb, trackName);
+    if (status != SWITCH_STATUS_SUCCESS) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "dub_silence_track: error silencing track %s\n", trackName);
+      return SWITCH_STATUS_FALSE;
     }
-
-    if (track) {
-      silence_dub_track(track);
-      status = SWITCH_STATUS_SUCCESS;
-    }
-    switch_mutex_unlock(cb->mutex);
   }
   else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "dub_silence_track: bug not found\n");
@@ -216,24 +175,14 @@ static switch_status_t dub_play_on_track(switch_core_session_t *session, char* t
   switch_channel_t *channel = switch_core_session_get_channel(session);
   switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, MY_BUG_NAME);
   switch_status_t status = SWITCH_STATUS_FALSE;
-  dub_track_t *track = NULL;
   
   if (bug) {
     struct cap_cb *cb =(struct cap_cb *) switch_core_media_bug_get_user_data(bug);
-    switch_mutex_lock(cb->mutex);
-    for (int i = 0; i < MAX_DUB_TRACKS; i++) {
-      if (cb->tracks[i].state != DUB_TRACK_STATE_INACTIVE && strcmp(cb->tracks[i].trackName, trackName) == 0) {
-        track = &cb->tracks[i];
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, 
-          "dub_play_on_track: playing %s on track %s at offset %d with gain %d\n", url, trackName, i, gain);
-        break;
-      }
+    status = play_dub_track(cb, trackName, url, loop, gain);
+    if (status != SWITCH_STATUS_SUCCESS) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "dub_play_on_track: error playing %s on track %s\n", url, trackName);
+      return SWITCH_STATUS_FALSE;
     }
-
-    if (track) {
-      status = play_dub_track(track, cb->mutex, url, loop, gain);
-    }
-    switch_mutex_unlock(cb->mutex);
   }
   return status;
 }
@@ -242,22 +191,14 @@ static switch_status_t dub_say_on_track(switch_core_session_t *session, char* tr
   switch_channel_t *channel = switch_core_session_get_channel(session);
   switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, MY_BUG_NAME);
   switch_status_t status = SWITCH_STATUS_FALSE;
-  dub_track_t *track = NULL;
   
   if (bug) {
     struct cap_cb *cb =(struct cap_cb *) switch_core_media_bug_get_user_data(bug);
-    switch_mutex_lock(cb->mutex);
-    for (int i = 0; i < MAX_DUB_TRACKS; i++) {
-      if (cb->tracks[i].state != DUB_TRACK_STATE_INACTIVE && strcmp(cb->tracks[i].trackName, trackName) == 0) {
-        track = &cb->tracks[i];
-        break;
-      }
+    status = say_dub_track(cb, trackName, text, gain);
+    if (status != SWITCH_STATUS_SUCCESS) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "dub_say_on_track: error saying %s on track %s\n", text, trackName);
+      return SWITCH_STATUS_FALSE;
     }
-
-    if (track) {
-      status = say_dub_track(track, cb->mutex, text, gain);
-    }
-    switch_mutex_unlock(cb->mutex);
   }
   return status;
 }
