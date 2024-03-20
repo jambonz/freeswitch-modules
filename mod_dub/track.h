@@ -25,7 +25,10 @@ public:
 
   /* audio playout methods */
   bool hasAudio();
-  bool hasAudio_NoLock() const;
+  inline bool hasAudio_NoLock() const {
+    return !_stopping && !_buffer.empty();
+  }
+
 
   int retrieveAndClearAudio(int16_t* buf, int desiredSamples) {
     std::lock_guard<std::mutex> lock(_mutex);
@@ -43,6 +46,7 @@ private:
   std::mutex _mutex;
   CircularBuffer_t _buffer;
   std::queue<std::shared_ptr<AudioProducer>> _apQueue;
+  bool _stopping;
 };
 
 

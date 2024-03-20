@@ -6,13 +6,14 @@
 #define INIT_BUFFER_SIZE (80000)
 
 Track::Track(const std::string& trackName, int sampleRate) : _trackName(trackName), _sampleRate(sampleRate), 
-  _buffer(INIT_BUFFER_SIZE)
+  _buffer(INIT_BUFFER_SIZE), _stopping(false)
 {
 
 }
 
 Track::~Track() {
   removeAllAudio();
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Track::~Track: track %s\n", _trackName.c_str());
 }
 
 /**
@@ -24,15 +25,23 @@ Track::~Track() {
  */
 void Track::onPlayDone(bool hasError, const std::string& errMsg) {
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "onPlayDone: error? %s %s\n", (hasError ? "yes" : "no"), errMsg.c_str());
-  std::lock_guard<std::mutex> lock(_mutex);
-  _apQueue.pop();
-  if (!_apQueue.empty()) {
-    _apQueue.front()->start(std::bind(&Track::onPlayDone, this, std::placeholders::_1, std::placeholders::_2));
+
+  if (!_stopping) {
+    if (hasError) switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "onPlayDone: error: %s\n", errMsg.c_str());
+    std::lock_guard<std::mutex> lock(_mutex);
+    _apQueue.pop();
+    if (!_apQueue.empty()) {
+      _apQueue.front()->start(std::bind(&Track::onPlayDone, this, std::placeholders::_1, std::placeholders::_2));
+    }
+  }
+  else {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "onPlayDone: track %s stopping\n", _trackName.c_str());
   }
 }
 
 void Track::queueFileAudio(const std::string& path, int gain, bool loop) {
   bool startIt = false;
+  if (_stopping) return;
 
   auto ap = std::make_shared<AudioProducerFile>(_mutex, _buffer, _sampleRate);
   {
@@ -53,6 +62,7 @@ void Track::queueFileAudio(const std::string& path, int gain, bool loop) {
 
 void Track::queueHttpGetAudio(const std::string& url, int gain, bool loop) {
   bool startIt = false;
+  if (_stopping) return;
   auto ap = std::make_shared<AudioProducerHttp>(_mutex, _buffer, _sampleRate);
   {
     std::lock_guard<std::mutex> lock(_mutex);
@@ -72,6 +82,7 @@ void Track::queueHttpGetAudio(const std::string& url, int gain, bool loop) {
 
 void Track::queueHttpPostAudio(const std::string& url, int gain, bool loop) {
   bool startIt = false;
+  if (_stopping) return;
   auto ap = std::make_shared<AudioProducerHttp>(_mutex, _buffer, _sampleRate);
   {
     std::lock_guard<std::mutex> lock(_mutex);
@@ -91,6 +102,7 @@ void Track::queueHttpPostAudio(const std::string& url, int gain, bool loop) {
 
 void Track::queueHttpPostAudio(const std::string& url, const std::string& body, std::vector<std::string>& headers, int gain, bool loop) {
   bool startIt = false;
+  if (_stopping) return;
   auto ap = std::make_shared<AudioProducerHttp>(_mutex, _buffer, _sampleRate);
   {
     std::lock_guard<std::mutex> lock(_mutex);
@@ -108,21 +120,24 @@ void Track::queueHttpPostAudio(const std::string& url, const std::string& body, 
   }
 }
 
-bool Track::hasAudio() {
+ bool Track::hasAudio() {
+  if (_stopping) return false;
   std::lock_guard<std::mutex> lock(_mutex); 
   return hasAudio_NoLock();
 }
-bool Track::hasAudio_NoLock() const {
-  return !_buffer.empty();
-}
 
 void Track::removeAllAudio() {
-  std::lock_guard<std::mutex> lock(_mutex); 
+  _stopping = true;
+  std::queue<std::shared_ptr<AudioProducer>> apQueueCopy;
+  {
+    std::lock_guard<std::mutex> lock(_mutex); 
+    apQueueCopy = _apQueue;
+    _apQueue = std::queue<std::shared_ptr<AudioProducer>>();
+  }
   
-  /* clear the queue */
-  while (!_apQueue.empty()) {
-    auto ap = _apQueue.front();
-    _apQueue.pop();
+  while (!apQueueCopy.empty()) {
+    auto ap = apQueueCopy.front();
+    apQueueCopy.pop();
     ap->stop();
   }
 }
