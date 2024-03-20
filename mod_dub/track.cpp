@@ -17,8 +17,7 @@ Track::~Track() {
 
 /**
  * @brief called when an audio producer has finished retrieving the audio.
- * If no error has occurred and the audio is looped then play it again,
- * otherwise proceed to the next ap in the queue.
+ * If we have another producer queued, then start it.
  * 
  * @param hasError 
  * @param errMsg 

@@ -41,7 +41,7 @@ extern "C" {
       }
     }
 
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "add_track: no room for track %s\n", trackName);
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "add_track: no room for track %s\n", trackName);
     return SWITCH_STATUS_FALSE;
   }
 
@@ -171,7 +171,6 @@ extern "C" {
       }
 
       if (activeTracks.size() == 0 && cb->gain == 0) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "dub_speech_frame: no active tracks\n");
         switch_mutex_unlock(cb->mutex);
         return SWITCH_TRUE;
       }
