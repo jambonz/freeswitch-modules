@@ -206,14 +206,14 @@ size_t AudioProducerHttp::write_cb(void *ptr, size_t size, size_t nmemb) {
   std::vector<int16_t> pcm_data;
   if (_status == Status_t::STATUS_STOPPING || _status == Status_t::STATUS_STOPPED) {
     _timer.cancel();
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
-      "AudioProducerHttp::write_cb: aborting transfer, status %s, mutex %p, buffer %p\n", status2String(_status));
+    //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
+    //  "AudioProducerHttp::write_cb: aborting transfer, status %s, mutex %p, buffer %p\n", status2String(_status));
     /* this will abort the transfer */
     return 0;
   }
   if (_response_code > 0 && _response_code != 200) {
     std::string body((char *) ptr, bytes_received);
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "AudioProducerHttp::write_cb: received body %s\n", body.c_str());
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "AudioProducerHttp::write_cb: received body %s\n", body.c_str());
     _err_msg = body;
     _status = Status_t::STATUS_FAILED;
     return 0;
@@ -232,19 +232,18 @@ size_t AudioProducerHttp::write_cb(void *ptr, size_t size, size_t nmemb) {
     return CURL_WRITEFUNC_PAUSE;
   }
 
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "AudioProducerHttp::write_cb: converting %ld bytes to linear\n", bytes_received);
   pcm_data = convert_mp3_to_linear(_mh, _gain, data, bytes_received);
   size_t bytesResampled = pcm_data.size() * sizeof(int16_t);
   std::lock_guard<std::mutex> lock(_mutex); 
 
   // Resize the buffer if necessary
   if (_buffer.capacity() - size < (bytesResampled / sizeof(int16_t))) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "AudioProducerHttp::write_cb growing buffer, size now %ld\n", _buffer.size()); 
+    //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "AudioProducerHttp::write_cb growing buffer, size now %ld\n", _buffer.size()); 
 
     //TODO: if buffer exceeds some max size, return CURL_WRITEFUNC_ERROR to abort the transfer
     _buffer.set_capacity(_buffer.size() + std::max((bytesResampled / sizeof(int16_t)), (size_t)BUFFER_GROW_SIZE));
   }
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "AudioProducerHttp::write_cb: writing %ld samples to buffer\n", pcm_data.size());
+  //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "AudioProducerHttp::write_cb: writing %ld samples to buffer\n", pcm_data.size());
   
   /* Push the data into the buffer */
   _buffer.insert(_buffer.end(), pcm_data.data(), pcm_data.data() + pcm_data.size());
@@ -284,12 +283,12 @@ void AudioProducerHttp::throttling_cb(const boost::system::error_code& error) {
     curl_easy_pause(_easy, CURLPAUSE_CONT);
     return;
   }
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "throttling_cb: status is %s\n", status2String(_status));
+  //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "throttling_cb: status is %s\n", status2String(_status));
 
   if (!error) {
     auto size = _buffer.size();
 
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "throttling_cb: size is now %ld\n", size);
+    //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "throttling_cb: size is now %ld\n", size);
     if (size < BUFFER_THROTTLE_LOW) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "throttling_cb: resuming download\n");
       curl_easy_pause(_easy, CURLPAUSE_CONT);
@@ -301,7 +300,7 @@ void AudioProducerHttp::throttling_cb(const boost::system::error_code& error) {
     _timer.async_wait(boost::bind(&AudioProducerHttp::throttling_cb, this, boost::placeholders::_1));
 
   } else {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "throttling_cb: error (%d): %s\n", error.value(), error.message().c_str());
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "throttling_cb: error (%d): %s\n", error.value(), error.message().c_str());
 
     // Handle any errors
   }
@@ -355,7 +354,6 @@ int AudioProducerHttp::multi_timer_cb(CURLM *multi, long timeout_ms, GlobalInfo_
 curl_socket_t AudioProducerHttp::open_socket(void *clientp, curlsocktype purpose, struct curl_sockaddr *address) {
   curl_socket_t sockfd = CURL_SOCKET_BAD;
 
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "open_socket: %d\n", purpose);
   /* restrict to IPv4 */
   if(purpose == CURLSOCKTYPE_IPCXN && address->family == AF_INET) {
     /* create a tcp socket object */
@@ -461,7 +459,6 @@ void AudioProducerHttp::setsock(int *fdp, curl_socket_t s, CURL *e, int act, int
   std::map<curl_socket_t, boost::asio::ip::tcp::socket *>::iterator it = socket_map.find(s);
 
   if(it == socket_map.end()) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "setsock: socket  %#X not found\n, s");
     return;
   }
 
@@ -501,17 +498,14 @@ void AudioProducerHttp::setsock(int *fdp, curl_socket_t s, CURL *e, int act, int
 void AudioProducerHttp::event_cb(GlobalInfo_t *g, curl_socket_t s, int action, const boost::system::error_code & error, int *fdp) {
   int f = *fdp;
 
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "event_cb socket %#X has action %d\n", s, action) ; 
 
   // Socket already POOL REMOVED.
   if (f == CURL_POLL_REMOVE) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "event_cb socket %#X removed\n", s); 
     remsock(fdp, g);
     return;
   }
 
   if(socket_map.find(s) == socket_map.end()) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "event_cb: socket  %#X already closed\n, s");
     return;
   }
 
@@ -537,8 +531,6 @@ void AudioProducerHttp::event_cb(GlobalInfo_t *g, curl_socket_t s, int action, c
       boost::asio::ip::tcp::socket *tcp_socket = socket_map.find(s)->second;
 
       if(action == CURL_POLL_IN) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "event_cb: read from socket  %#X\n, s");
-
         tcp_socket->async_read_some(boost::asio::null_buffers(),
                                     boost::bind(&event_cb, g, s,
                                                 action, boost::placeholders::_1, fdp));
@@ -629,6 +621,9 @@ void AudioProducerHttp::restart_cb(const boost::system::error_code& error) {
     _err_msg.clear();
 
     start(_callback);
+  }
+  else if (error.value() == boost::asio::error::operation_aborted) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "restart_cb: %s, cancelling retrieve\n", error.message().c_str());
   }
   else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "restart_cb: error (%d): %s\n", error.value(), error.message().c_str());

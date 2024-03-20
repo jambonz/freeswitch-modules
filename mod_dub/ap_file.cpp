@@ -95,16 +95,16 @@ void AudioProducerFile::start(std::function<void(bool, const std::string&)> call
     _callback = callback;
 
     /* allocate handle for mpeg decoding */
-    mpg123_handle *mh = mpg123_new("auto", &mhError);
-    if (!mh) {
+    _mh = mpg123_new("auto", &mhError);
+    if (!_mh) {
       const char *mhErr = mpg123_plain_strerror(mhError);
       throw std::runtime_error("Error allocating mpg123 handle! " + std::string(mhErr));
     }
 
-    if (mpg123_open_feed(mh) != MPG123_OK) throw std::runtime_error("Error mpg123_open_feed!");
-    if (mpg123_format_all(mh) != MPG123_OK) throw std::runtime_error("Error mpg123_format_all!");
-    if (mpg123_param(mh, MPG123_FORCE_RATE, _sampleRate, 0) != MPG123_OK) throw std::runtime_error("Error forcing resample to 8k!");
-    if (mpg123_param(mh, MPG123_FLAGS, MPG123_MONO_MIX, 0) != MPG123_OK) throw std::runtime_error("Error forcing single channel!");
+    if (mpg123_open_feed(_mh) != MPG123_OK) throw std::runtime_error("Error mpg123_open_feed!");
+    if (mpg123_format_all(_mh) != MPG123_OK) throw std::runtime_error("Error mpg123_format_all!");
+    if (mpg123_param(_mh, MPG123_FORCE_RATE, _sampleRate, 0) != MPG123_OK) throw std::runtime_error("Error forcing resample to 8k!");
+    if (mpg123_param(_mh, MPG123_FLAGS, MPG123_MONO_MIX, 0) != MPG123_OK) throw std::runtime_error("Error forcing single channel!");
     
     _fp = fopen(_path.c_str(), "rb");
     if (!_fp) throw std::runtime_error("Error opening file " + _path);
@@ -123,11 +123,9 @@ void AudioProducerFile::read_cb(const boost::system::error_code& error) {
   }
   if (_status == Status_t::STATUS_AWAITING_RESTART) {
     _status = Status_t::STATUS_IN_PROGRESS;
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "read_cb: %p starting initial read of file\n", (void *) this);
   }
   if (!error) {
     size_t size = _buffer.size();
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "read_cb: %p size is now %ld\n", (void *) this, size);
     if (size < BUFFER_THROTTLE_LOW) {
       std::vector<int16_t> pcm_data;
       int8_t buf[INIT_BUFFER_SIZE];
@@ -150,18 +148,18 @@ void AudioProducerFile::read_cb(const boost::system::error_code& error) {
         // Resize the buffer if necessary
         size_t capacity = _buffer.capacity();
         if (capacity - size < pcm_data.size()) {
-          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "write_cb %p growing buffer, size now %ld\n", (void *) this, size); 
+          //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "write_cb %p growing buffer, size now %ld\n", (void *) this, size); 
           _buffer.set_capacity(size + std::max(pcm_data.size(), (size_t)BUFFER_GROW_SIZE));
         }
         
         /* Push the data into the buffer */
         _buffer.insert(_buffer.end(), pcm_data.data(), pcm_data.data() + pcm_data.size());
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "read_cb: %p wrote data, buffer size is now %ld\n", (void *) this, _buffer.size());        
+        //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "read_cb: %p wrote data, buffer size is now %ld\n", (void *) this, _buffer.size());        
       }
 
       if (bytesRead < INIT_BUFFER_SIZE) {
         _status = Status_t::STATUS_COMPLETE;
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "read_cb: %u reached end of file, status is %s\n", (void *) this, status2String(_status));
+        //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "read_cb: %u reached end of file, status is %s\n", (void *) this, status2String(_status));
       }
     }
 
