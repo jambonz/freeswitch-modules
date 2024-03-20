@@ -183,7 +183,7 @@ extern "C" {
 
       /* apply gain to audio in main channel if requested*/
       if (cb->gain != 0) {
-        switch_change_sln_volume_granular(fp, rframe->samples, cb->gain);
+        vector_change_sln_volume_granular(fp, rframe->samples, cb->gain);
       }
 
       /* now mux in the data from tracks */
