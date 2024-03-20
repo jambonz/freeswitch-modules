@@ -71,6 +71,7 @@ AudioProducerFile::~AudioProducerFile() {
     mpg123_close(_mh);
     mpg123_delete(_mh);
   }
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "AudioProducerFile::~AudioProducerFile %p\n", (void *)this);
 }
 
 void AudioProducerFile::queueFileAudio(const std::string& path, int gain, bool loop) {
@@ -177,7 +178,7 @@ void AudioProducerFile::read_cb(const boost::system::error_code& error) {
 }
 
 void AudioProducerFile::stop() {
-  cleanup(Status_t::STATUS_STOPPED, 0);
+  cleanup(Status_t::STATUS_STOPPED, "");
 }
 
 void AudioProducerFile::cleanup(Status_t status, std::string errMsg) {

@@ -104,10 +104,10 @@ static switch_bool_t capture_callback(switch_media_bug_t *bug, void *user_data, 
 
 	case SWITCH_ABC_TYPE_CLOSE:
 		{
-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Got SWITCH_ABC_TYPE_CLOSE, calling google_speech_session_cleanup.\n");
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "mod_google_transcribe: Got SWITCH_ABC_TYPE_CLOSE, calling google_speech_session_cleanup.\n");
 			responseHandler(session, "end_of_transcript", cb->bugname);
 			google_speech_session_cleanup(session, 1, bug);
-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Finished SWITCH_ABC_TYPE_CLOSE.\n");
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "mod_google_transcribe: Finished SWITCH_ABC_TYPE_CLOSE.\n");
 		}
 		break;
 	
@@ -312,7 +312,7 @@ SWITCH_STANDARD_API(transcribe2_function)
 
 		if ((lsession = switch_core_session_locate(argv[0]))) {
 			if (!strcasecmp(argv[1], "stop")) {
-    		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "stop transcribing\n");
+    		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "mod_google_transcribe: stop transcribing\n");
 				status = do_stop(lsession, MY_BUG_NAME);
 			} else if (!strcasecmp(argv[1], "start")) {
         char* lang = argv[2];
@@ -336,7 +336,7 @@ SWITCH_STANDARD_API(transcribe2_function)
 				if (argc > 14){
 					play_file = argv[14];
 				}
-    		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "start transcribing %s %s\n", lang, interim ? "interim": "complete");
+    		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "mod_google_transcribe: start transcribing %s %s\n", lang, interim ? "interim": "complete");
 				status = start_capture2(lsession, flags, sample_rate, lang, interim, single_utterance, separate_recognition,max_alternatives,
 				profinity_filter, word_time_offset, punctuation, model, enhanced, hints, play_file);
 			}
@@ -381,7 +381,7 @@ SWITCH_STANDARD_API(transcribe_function)
 		if ((lsession = switch_core_session_locate(argv[0]))) {
 			if (!strcasecmp(argv[1], "stop")) {
 				char *bugname = argc > 2 ? argv[2] : MY_BUG_NAME;
-    		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "stop transcribing\n");
+    		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "mod_google_transcribe: stop transcribing\n");
 				status = do_stop(lsession, bugname);
 			} else if (!strcasecmp(argv[1], "start")) {
         char* lang = argv[2];
@@ -391,7 +391,7 @@ SWITCH_STANDARD_API(transcribe_function)
           flags |= SMBF_WRITE_STREAM ;
           flags |= SMBF_STEREO;
 				}
-    		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "%s start transcribing %s %s\n", bugname, lang, interim ? "interim": "complete");
+    		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "mod_google_transcribe: %s start transcribing %s %s\n", bugname, lang, interim ? "interim": "complete");
 				status = start_capture(lsession, flags, lang, interim, bugname);
 			}
 			switch_core_session_rwunlock(lsession);

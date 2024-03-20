@@ -89,7 +89,6 @@ static switch_status_t dub_add_track(switch_core_session_t *session, char* track
   switch_channel_t *channel = switch_core_session_get_channel(session);
   switch_media_bug_t *bug = NULL;
   struct cap_cb *cb = NULL;
-  int offset = 0;
   int samples_per_second;
 
   switch_codec_implementation_t write_impl = { 0 };
@@ -112,7 +111,9 @@ static switch_status_t dub_add_track(switch_core_session_t *session, char* track
   switch_core_session_get_write_impl(session, &write_impl);
 	samples_per_second = !strcasecmp(write_impl.iananame, "g722") ? write_impl.actual_samples_per_second : write_impl.samples_per_second;
 
+  switch_mutex_lock(cb->mutex);
   if (add_track(cb, trackName, samples_per_second) != SWITCH_STATUS_SUCCESS) {
+    switch_mutex_unlock(cb->mutex);
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "dub_add_track: error adding track %s\n", trackName);
     return SWITCH_STATUS_FALSE;
   }
@@ -120,13 +121,13 @@ static switch_status_t dub_add_track(switch_core_session_t *session, char* track
   if (!bug) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "dub_add_track: adding bug for track %s\n", trackName);
     if (switch_core_media_bug_add(session, MY_BUG_NAME, NULL, capture_callback, (void *) cb, 0, SMBF_WRITE_REPLACE, &bug) != SWITCH_STATUS_SUCCESS) {
+      switch_mutex_unlock(cb->mutex);
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "dub_add_track: error adding bug!\n");
       return SWITCH_STATUS_FALSE;
     }
     switch_channel_set_private(channel, MY_BUG_NAME, bug);
   }
-
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "dub_add_track: added track %s at offset %d\n", trackName, offset);
+  switch_mutex_unlock(cb->mutex);
 
   return SWITCH_STATUS_SUCCESS;
 }
@@ -138,7 +139,10 @@ static switch_status_t dub_remove_track(switch_core_session_t *session, char* tr
   
   if (bug) {
     struct cap_cb *cb =(struct cap_cb *) switch_core_media_bug_get_user_data(bug);
+
+    switch_mutex_lock(cb->mutex);
     status = remove_dub_track(cb, trackName);
+    switch_mutex_unlock(cb->mutex);
     if (status != SWITCH_STATUS_SUCCESS) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "dub_remove_track: error removing track %s\n", trackName);
       return SWITCH_STATUS_FALSE;

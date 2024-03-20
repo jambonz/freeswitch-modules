@@ -17,9 +17,13 @@ typedef boost::circular_buffer<int16_t> CircularBuffer_t;
 extern "C" {
 
   Track* find_track_by_name(void** tracks, const std::string& trackName) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "find_track_by_name: searching for %s\n", trackName.c_str());
+
     for (int i = 0; i < MAX_DUB_TRACKS; i++) {
       Track* track = static_cast<Track*>(tracks[i]);
-      if (track && track->getTrackName() == trackName) {
+      std::string name = track ? track->getTrackName() : "null";
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "find_track_by_name: offset %d: %s\n", i, name.c_str());
+      if (track && 0 == track->getTrackName().compare(trackName)) {
         return track;
       }
     }
@@ -36,7 +40,7 @@ extern "C" {
     for (int i = 0; i < MAX_DUB_TRACKS; i++) {
       if (!cb->tracks[i]) {
         cb->tracks[i] = new Track(trackName, sampleRate);
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "add_track: added track %s\n", trackName);
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "add_track: added track %s at offset %d\n", trackName, i);
         return SWITCH_STATUS_SUCCESS;
       }
     }
@@ -166,7 +170,7 @@ extern "C" {
       for (int i = 0; i < MAX_DUB_TRACKS; i++) {
         if (cb->tracks[i]) {
           auto track = static_cast<Track*>(cb->tracks[i]);
-          if (track->hasAudio()) activeTracks.push_back(static_cast<Track*>(cb->tracks[i]));
+          if (track->hasAudio_NoLock()) activeTracks.push_back(static_cast<Track*>(cb->tracks[i]));
         }
       }
 
