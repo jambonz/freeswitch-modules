@@ -27,7 +27,7 @@ void AudioProducerHttp::threadFunc() {
   io_service.reset() ;
   boost::asio::io_service::work work(io_service);
   
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "file_loader threadFunc - starting\n");
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "ap_http threadFunc - starting\n");
 
   for(;;) {
       
@@ -36,10 +36,10 @@ void AudioProducerHttp::threadFunc() {
       break ;
     }
     catch( std::exception& e) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "file_loader threadFunc - Error: %s\n", e.what());
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "ap_http threadFunc - Error: %s\n", e.what());
     }
   }
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "file_loader threadFunc - ending\n");
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "ap_http threadFunc - ending\n");
 }
 
 void AudioProducerHttp::_init() {
@@ -94,7 +94,8 @@ AudioProducerHttp::AudioProducerHttp(
 }
 
 AudioProducerHttp::~AudioProducerHttp() {
-
+  reset();
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "AudioProducerFile::~AudioProducerFile %p\n", (void *)this);
 }
 
 void AudioProducerHttp::start(std::function<void(bool, const std::string&)> callback) {
@@ -233,15 +234,15 @@ size_t AudioProducerHttp::write_cb(void *ptr, size_t size, size_t nmemb) {
   }
 
   pcm_data = convert_mp3_to_linear(_mh, _gain, data, bytes_received);
-  size_t bytesResampled = pcm_data.size() * sizeof(int16_t);
+  size_t samples = pcm_data.size();
   std::lock_guard<std::mutex> lock(_mutex); 
 
   // Resize the buffer if necessary
-  if (_buffer.capacity() - size < (bytesResampled / sizeof(int16_t))) {
+  if (_buffer.capacity() - bufSize < samples) {
     //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "AudioProducerHttp::write_cb growing buffer, size now %ld\n", _buffer.size()); 
 
     //TODO: if buffer exceeds some max size, return CURL_WRITEFUNC_ERROR to abort the transfer
-    _buffer.set_capacity(_buffer.size() + std::max((bytesResampled / sizeof(int16_t)), (size_t)BUFFER_GROW_SIZE));
+    _buffer.set_capacity(_buffer.size() + std::max(samples, (size_t)BUFFER_GROW_SIZE));
   }
   //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "AudioProducerHttp::write_cb: writing %ld samples to buffer\n", pcm_data.size());
   
@@ -608,18 +609,7 @@ void AudioProducerHttp::restart_cb(const boost::system::error_code& error) {
     return;
   }
   if (!error) {
-    curl_multi_remove_handle(global.multi, _easy);
-    if (_easy) {
-      curl_easy_cleanup(_easy);
-      _easy = nullptr;
-    }
-    if (_mh) {
-      mpg123_close(_mh);
-      mpg123_delete(_mh);
-      _mh = nullptr;
-    }
-    _err_msg.clear();
-
+    reset();
     start(_callback);
   }
   else if (error.value() == boost::asio::error::operation_aborted) {
@@ -636,8 +626,9 @@ void AudioProducerHttp::stop() {
   return;
 }
 
-void AudioProducerHttp::cleanup(Status_t status, int response_code) {
+void AudioProducerHttp::reset() {
   if (_easy) {
+    curl_multi_remove_handle(global.multi, _easy);
     curl_easy_cleanup(_easy);
     _easy = nullptr;
   }
@@ -646,8 +637,15 @@ void AudioProducerHttp::cleanup(Status_t status, int response_code) {
     mpg123_delete(_mh);
     _mh = nullptr;
   }
-  _status = status;
   _err_msg.clear();
   _response_code = 0;
   _timer.cancel();
+  _status = Status_t::STATUS_NONE;
+}
+
+void AudioProducerHttp::cleanup(Status_t status, int response_code) {
+  std::string errMsg = response_code > 200 ? "http response: " + std::to_string(response_code) : "";
+  reset();
+  _status = status;
+  notifyDone(!errMsg.empty(), errMsg);
 }

@@ -64,13 +64,7 @@ AudioProducerFile::AudioProducerFile(
 }
 
 AudioProducerFile::~AudioProducerFile() {
-  _timer.cancel();
-
-  /* free mp3 decoder */
-  if (_mh) {
-    mpg123_close(_mh);
-    mpg123_delete(_mh);
-  }
+  reset();
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "AudioProducerFile::~AudioProducerFile %p\n", (void *)this);
 }
 
@@ -181,8 +175,8 @@ void AudioProducerFile::stop() {
   cleanup(Status_t::STATUS_STOPPED, "");
 }
 
-void AudioProducerFile::cleanup(Status_t status, std::string errMsg) {
-  if (_fp) {
+void AudioProducerFile::reset() {
+    if (_fp) {
     fclose(_fp);
     _fp = nullptr;
   }
@@ -191,7 +185,12 @@ void AudioProducerFile::cleanup(Status_t status, std::string errMsg) {
     mpg123_delete(_mh);
     _mh = nullptr;
   }
-  _status = status;
+    _timer.cancel();
+  _status = Status_t::STATUS_NONE;
+}
 
-  notifyDone(!errMsg.empty(),  errMsg);
+void AudioProducerFile::cleanup(Status_t status, std::string errMsg) {
+  reset();
+  _status = status;
+  notifyDone(status != Status_t::STATUS_COMPLETE, errMsg);
 }
