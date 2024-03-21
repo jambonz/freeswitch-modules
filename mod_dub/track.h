@@ -3,7 +3,6 @@
 
 #include <mutex>
 #include <queue>
-
 #include "common.h"
 #include "ap.h"
 
@@ -37,8 +36,6 @@ public:
     _buffer.erase(_buffer.begin(), _buffer.begin() + samplesToCopy);
     return samplesToCopy;
   }
-
-  void copyAndRemoveAudio(std::vector<int16_t>& audio);
 
 private:
   std::string _trackName;
