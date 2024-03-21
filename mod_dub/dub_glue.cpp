@@ -108,7 +108,7 @@ extern "C" {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "say_dub_track: failed to parse text\n");
       return SWITCH_STATUS_FALSE;
     }
-    track->queueHttpPostAudio(text, body, headers, gain);
+    track->queueHttpPostAudio(url, body, headers, gain);
     return SWITCH_STATUS_SUCCESS;
   }
 
