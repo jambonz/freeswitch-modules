@@ -27,7 +27,7 @@ void AudioProducerHttp::threadFunc() {
   io_service.reset() ;
   boost::asio::io_service::work work(io_service);
   
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "file_loader threadFunc - starting\n");
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "ap_http threadFunc - starting\n");
 
   for(;;) {
       
@@ -36,10 +36,10 @@ void AudioProducerHttp::threadFunc() {
       break ;
     }
     catch( std::exception& e) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "file_loader threadFunc - Error: %s\n", e.what());
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "ap_http threadFunc - Error: %s\n", e.what());
     }
   }
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "file_loader threadFunc - ending\n");
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "ap_http threadFunc - ending\n");
 }
 
 void AudioProducerHttp::_init() {
@@ -237,7 +237,7 @@ size_t AudioProducerHttp::write_cb(void *ptr, size_t size, size_t nmemb) {
   std::lock_guard<std::mutex> lock(_mutex); 
 
   // Resize the buffer if necessary
-  if (_buffer.capacity() - size < (bytesResampled / sizeof(int16_t))) {
+  if (_buffer.capacity() - bufSize < (bytesResampled / sizeof(int16_t))) {
     //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "AudioProducerHttp::write_cb growing buffer, size now %ld\n", _buffer.size()); 
 
     //TODO: if buffer exceeds some max size, return CURL_WRITEFUNC_ERROR to abort the transfer
@@ -647,7 +647,8 @@ void AudioProducerHttp::cleanup(Status_t status, int response_code) {
     _mh = nullptr;
   }
   _status = status;
+  _timer.cancel();
+  notifyDone(!_err_msg.empty(),  _err_msg);
   _err_msg.clear();
   _response_code = 0;
-  _timer.cancel();
 }

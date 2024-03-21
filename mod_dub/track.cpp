@@ -44,14 +44,13 @@ void Track::queueFileAudio(const std::string& path, int gain, bool loop) {
   if (_stopping) return;
 
   auto ap = std::make_shared<AudioProducerFile>(_mutex, _buffer, _sampleRate);
+  ap->queueFileAudio(path, gain, loop);
   {
     std::lock_guard<std::mutex> lock(_mutex);
     _apQueue.push(ap);
     startIt = _apQueue.size() == 1;
   }
-
   if (startIt) {
-    ap->queueFileAudio(path, gain, loop);
     try {
       ap->start(std::bind(&Track::onPlayDone, this, std::placeholders::_1, std::placeholders::_2));
     } catch (std::exception& e) {

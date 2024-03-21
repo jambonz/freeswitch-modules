@@ -80,7 +80,6 @@ extern "C" {
   switch_status_t play_dub_track(struct cap_cb* cb, char* trackName, char* url, int loop, int gain) {
     bool isHttp = strncmp(url, "http", 4) == 0;
     Track* track = find_track_by_name(cb->tracks, trackName);
-
     if (!track) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "play_dub_track: track %s not found\n", trackName);
       return SWITCH_STATUS_FALSE;
