@@ -15,10 +15,9 @@ public:
   virtual ~AudioProducer() {}
 
   virtual void notifyDone(bool error, const std::string& errorMsg) {
-    assert(_callback);
     if (!_notified) {
       _notified = true;
-      _callback(error, errorMsg);
+      if (_callback) _callback(error, errorMsg);
     }
   }
   virtual void start(std::function<void(bool, const std::string&)> callback) = 0;
