@@ -8,7 +8,6 @@
 Track::Track(const std::string& trackName, int sampleRate) : _trackName(trackName), _sampleRate(sampleRate), 
   _buffer(INIT_BUFFER_SIZE), _stopping(false)
 {
-
 }
 
 Track::~Track() {

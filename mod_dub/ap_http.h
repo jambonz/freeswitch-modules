@@ -63,6 +63,7 @@ public:
   virtual void start(std::function<void(bool, const std::string&)> callback);
   virtual void stop();
   void cleanup(Status_t status, int response_code);
+  void reset();
 
   void queueHttpGetAudio(const std::string& url, int gain = 0, bool loop = false);
   void queueHttpPostAudio(const std::string& url, int gain = 0, bool loop = false);

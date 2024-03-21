@@ -59,6 +59,7 @@ public:
   virtual void start(std::function<void(bool, const std::string&)> callback);
   virtual void stop();
   void cleanup(Status_t status, std::string errMsg = "");
+  void reset();
 
   void queueFileAudio(const std::string& path, int gain = 0, bool loop = false);
 
