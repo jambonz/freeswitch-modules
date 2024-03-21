@@ -63,6 +63,7 @@ void Track::queueHttpGetAudio(const std::string& url, int gain, bool loop) {
   bool startIt = false;
   if (_stopping) return;
   auto ap = std::make_shared<AudioProducerHttp>(_mutex, _buffer, _sampleRate);
+  ap->queueHttpGetAudio(url, gain, loop);
   {
     std::lock_guard<std::mutex> lock(_mutex);
     _apQueue.push(ap);
@@ -70,7 +71,6 @@ void Track::queueHttpGetAudio(const std::string& url, int gain, bool loop) {
   }
 
   if (startIt) {
-    ap->queueHttpGetAudio(url, gain, loop);
     try {
       ap->start(std::bind(&Track::onPlayDone, this, std::placeholders::_1, std::placeholders::_2));
     } catch (std::exception& e) {
@@ -83,6 +83,7 @@ void Track::queueHttpPostAudio(const std::string& url, int gain, bool loop) {
   bool startIt = false;
   if (_stopping) return;
   auto ap = std::make_shared<AudioProducerHttp>(_mutex, _buffer, _sampleRate);
+  ap->queueHttpPostAudio(url, gain, loop);
   {
     std::lock_guard<std::mutex> lock(_mutex);
     _apQueue.push(ap);
@@ -90,7 +91,6 @@ void Track::queueHttpPostAudio(const std::string& url, int gain, bool loop) {
   }
 
   if (startIt) {
-    ap->queueHttpPostAudio(url, gain, loop);
     try {
       ap->start(std::bind(&Track::onPlayDone, this, std::placeholders::_1, std::placeholders::_2));
     } catch (std::exception& e) {
@@ -103,6 +103,7 @@ void Track::queueHttpPostAudio(const std::string& url, const std::string& body, 
   bool startIt = false;
   if (_stopping) return;
   auto ap = std::make_shared<AudioProducerHttp>(_mutex, _buffer, _sampleRate);
+  ap->queueHttpPostAudio(url, body, headers, gain, loop);
   {
     std::lock_guard<std::mutex> lock(_mutex);
     _apQueue.push(ap);
@@ -110,7 +111,6 @@ void Track::queueHttpPostAudio(const std::string& url, const std::string& body, 
   }
 
   if (startIt) {
-    ap->queueHttpPostAudio(url, body, headers, gain, loop);
     try {
       ap->start(std::bind(&Track::onPlayDone, this, std::placeholders::_1, std::placeholders::_2));
     } catch (std::exception& e) {
