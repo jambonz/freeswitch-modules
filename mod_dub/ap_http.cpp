@@ -98,6 +98,13 @@ AudioProducerHttp::~AudioProducerHttp() {
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "AudioProducerFile::~AudioProducerFile %p\n", (void *)this);
 }
 
+void AudioProducerHttp::startIt(const boost::system::error_code& error) {
+  auto rc = curl_multi_add_handle(global.multi, _easy);
+  if (mcode_test("new_conn: curl_multi_add_handle", rc) < 0) {
+    throw std::runtime_error("Error adding easy handle to multi handle!\n");
+  }
+}
+
 void AudioProducerHttp::start(std::function<void(bool, const std::string&)> callback) {
   int mhError = 0;
 
@@ -152,10 +159,8 @@ void AudioProducerHttp::start(std::function<void(bool, const std::string&)> call
 
   _status = Status_t::STATUS_AWAITING_RESTART;
 
-  auto rc = curl_multi_add_handle(global.multi, _easy);
-  if (mcode_test("new_conn: curl_multi_add_handle", rc) < 0) {
-    throw std::runtime_error("Error adding easy handle to multi handle!\n");
-  }
+  _timer.expires_from_now(boost::posix_time::millisec(1));
+  _timer.async_wait(boost::bind(&AudioProducerHttp::startIt, this, boost::placeholders::_1));
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "AudioProducerHttp::start retrieving from %s\n", _url.c_str());
 }
 void AudioProducerHttp::queueHttpGetAudio(const std::string& url, int gain, bool loop) {
@@ -212,6 +217,7 @@ size_t AudioProducerHttp::write_cb(void *ptr, size_t size, size_t nmemb) {
     /* this will abort the transfer */
     return 0;
   }
+  
   if (_response_code > 0 && _response_code != 200) {
     std::string body((char *) ptr, bytes_received);
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "AudioProducerHttp::write_cb: received body %s\n", body.c_str());

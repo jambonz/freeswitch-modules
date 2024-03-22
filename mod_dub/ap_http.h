@@ -61,6 +61,7 @@ public:
   virtual ~AudioProducerHttp();
 
   virtual void start(std::function<void(bool, const std::string&)> callback);
+  void startIt(const boost::system::error_code& error);
   virtual void stop();
   void cleanup(Status_t status, int response_code);
   void reset();
