@@ -152,11 +152,8 @@ void AudioProducerHttp::start(std::function<void(bool, const std::string&)> call
 
   _status = Status_t::STATUS_AWAITING_RESTART;
 
-  auto rc = curl_multi_add_handle(global.multi, _easy);
-  if (mcode_test("new_conn: curl_multi_add_handle", rc) < 0) {
-    throw std::runtime_error("Error adding easy handle to multi handle!\n");
-  }
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "AudioProducerHttp::start retrieving from %s\n", _url.c_str());
+  _timer.expires_from_now(boost::posix_time::millisec(1));
+  _timer.async_wait(boost::bind(&AudioProducerHttp::addCurlHandle, this, boost::placeholders::_1));
 }
 void AudioProducerHttp::queueHttpGetAudio(const std::string& url, int gain, bool loop) {
   _method = HttpMethod_t::HTTP_METHOD_GET;
@@ -179,6 +176,18 @@ void AudioProducerHttp::queueHttpPostAudio(const std::string& url, const std::st
   _loop = loop;
 }
 
+void AudioProducerHttp::addCurlHandle(const boost::system::error_code& error) {
+  if (_status == Status_t::STATUS_AWAITING_RESTART) {
+    auto rc = curl_multi_add_handle(global.multi, _easy);
+    if (mcode_test("new_conn: curl_multi_add_handle", rc) < 0) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "AudioProducerHttp::addCurlHandle: Error adding easy handle to multi handle\n");
+    }
+    else {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "AudioProducerHttp::addCurlHandle retrieving from %s\n", _url.c_str());
+    }
+  }
+}
+
 CURL* AudioProducerHttp::createEasyHandle(void) {
   CURL* easy = curl_easy_init();
   if(!easy) {
@@ -195,7 +204,6 @@ CURL* AudioProducerHttp::createEasyHandle(void) {
 
   return easy ;    
 }
-
 
 size_t AudioProducerHttp::static_write_cb(char* ptr, size_t size, size_t nmemb, void* userdata) {
   return static_cast<AudioProducerHttp*>(userdata)->write_cb(ptr, size, nmemb);
@@ -300,10 +308,11 @@ void AudioProducerHttp::throttling_cb(const boost::system::error_code& error) {
     _timer.expires_from_now(boost::posix_time::millisec(2000));
     _timer.async_wait(boost::bind(&AudioProducerHttp::throttling_cb, this, boost::placeholders::_1));
 
-  } else {
+  } else if (125 == error.value()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "throttling_cb: timer canceled\n");
+  }
+  else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "throttling_cb: error (%d): %s\n", error.value(), error.message().c_str());
-
-    // Handle any errors
   }
 }
 
