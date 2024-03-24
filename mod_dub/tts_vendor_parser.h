@@ -2,6 +2,7 @@
 #define __MOD_DUB_TTS_VENDOR_PARSER_H__
 
 #include <string>
+#include <vector>
 #include <switch.h>
 #include "common.h"
 

@@ -2,7 +2,7 @@
 #define __AP_H__
 
 #include <mutex>
-
+#include <functional>
 #include "common.h"
 
 class AudioProducer {
