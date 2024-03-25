@@ -288,7 +288,7 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
       // TODO: This works on the same principle as that used in the v1 equivalent, in that we search for the textual
       // error message to determine whether the cause of the problem is the expiration of the session.
       // It would be better if we could find a more reliable way of detecting this.
-      if (11 == status.error_code()) {
+      if (10 == status.error_code()) {
         if (std::string::npos != status.error_message().find("Max duration of 5 minutes reached")) {
           cb->responseHandler(session, "max_duration_exceeded", cb->bugname);
         }
