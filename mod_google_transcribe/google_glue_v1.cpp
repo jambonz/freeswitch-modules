@@ -331,13 +331,23 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
     switch_core_session_t* session = switch_core_session_locate(cb->sessionId);
     if (session) {
       grpc::Status status = streamer->finish();
-      if (11 == status.error_code()) {
+      if (10 == status.error_code()) {
         if (std::string::npos != status.error_message().find("Exceeded maximum allowed stream duration")) {
           cb->responseHandler(session, "max_duration_exceeded", cb->bugname);
         }
         else {
           cb->responseHandler(session, "no_audio", cb->bugname);
         }
+      }
+      else {
+        cJSON* json = cJSON_CreateObject();
+        cJSON_AddStringToObject(json, "type", "error");
+        cJSON_AddItemToObject(json, "error_code", cJSON_CreateNumber(status.error_code()));
+        cJSON_AddStringToObject(json, "error_message", status.error_message().c_str());
+        char* jsonString = cJSON_PrintUnformatted(json);
+        cb->responseHandler(session, jsonString, cb->bugname);
+        free(jsonString);
+        cJSON_Delete(json);
       }
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "grpc_read_thread: finish() status %s (%d)\n", status.error_message().c_str(), status.error_code()) ;
       switch_core_session_rwunlock(session);
