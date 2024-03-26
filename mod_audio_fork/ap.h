@@ -1,5 +1,5 @@
-#ifndef __AP_H__
-#define __AP_H__
+#ifndef __MOD_AUDIO_FORK_AP_H__
+#define __MOD_AUDIO_FORK_AP_H__
 
 #include <mutex>
 #include <functional>

@@ -1,5 +1,5 @@
-#ifndef VECTOR_MATH_H
-#define VECTOR_MATH_H
+#ifndef MOD_AUDIO_VECTOR_MATH_H
+#define MOD_AUDIO_VECTOR_MATH_H
 
 #include <stddef.h>
 #include <stdint.h>

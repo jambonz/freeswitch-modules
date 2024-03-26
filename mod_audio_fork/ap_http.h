@@ -1,5 +1,5 @@
-#ifndef __AP_HTTP_H__
-#define __AP_HTTP_H__
+#ifndef __MOD_AUDIO_AP_HTTP_H__
+#define __MOD_AUDIO_AP_HTTP_H__
 
 #include "ap.h"
 #include <curl/curl.h>

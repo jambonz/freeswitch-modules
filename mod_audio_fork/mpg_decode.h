@@ -1,6 +1,6 @@
 
-#ifndef MPG_DECODE_H
-#define MPG_DECODE_H
+#ifndef MOD_AUDIO_MPG_DECODE_H
+#define MOD_AUDIO_MPG_DECODE_H
 
 #include <vector>
 #include <mpg123.h>

@@ -1,5 +1,5 @@
-#ifndef  __TRACK_H__
-#define __TRACK_H__
+#ifndef  __MOD_AUDIO_TRACK_H__
+#define __MOD_AUDIO_TRACK_H__
 
 #include <mutex>
 #include <queue>
