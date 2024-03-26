@@ -636,15 +636,18 @@ void AudioProducerHttp::stop() {
 }
 
 void AudioProducerHttp::reset() {
-  if (_easy) {
-    curl_multi_remove_handle(global.multi, _easy);
-    curl_easy_cleanup(_easy);
-    _easy = nullptr;
-  }
-  if (_mh) {
-    mpg123_close(_mh);
-    mpg123_delete(_mh);
-    _mh = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (_easy) {
+      curl_multi_remove_handle(global.multi, _easy);
+      curl_easy_cleanup(_easy);
+      _easy = nullptr;
+    }
+    if (_mh) {
+      mpg123_close(_mh);
+      mpg123_delete(_mh);
+      _mh = nullptr;
+    }
   }
   _err_msg.clear();
   _response_code = 0;
