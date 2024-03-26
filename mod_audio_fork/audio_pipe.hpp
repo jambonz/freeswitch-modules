@@ -85,7 +85,7 @@ namespace drachtio {
       return m_gracefulShutdown;
     }
 
-    bool bidirectional_audio_sample_rate() {
+    bool is_bidirectional_audio() {
       return m_bidirectional_audio;
     }
 

@@ -140,7 +140,7 @@ int AudioPipe::lws_callback(struct lws *wsi,
           return 0;
         }
 
-        if ( is_binary && ap->bidirectional_audio_sample_rate() <= 0) {
+        if ( is_binary && ap->is_bidirectional_audio() <= 0) {
           lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE received binary frame, discarding.\n");
           return 0;
         }
@@ -180,7 +180,7 @@ int AudioPipe::lws_callback(struct lws *wsi,
           }
           if (lws_is_final_fragment(wsi)) {
             std::string msg((char *)ap->m_recv_buf, ap->m_recv_buf_ptr - ap->m_recv_buf);
-            ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), is_binary ? AudioPipe::MESSAGE : AudioPipe::BINARY , msg.c_str());
+            ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), is_binary ? AudioPipe::BINARY : AudioPipe::MESSAGE, msg.c_str());
             free(ap->m_recv_buf);
             ap->m_recv_buf = ap->m_recv_buf_ptr = nullptr;
             ap->m_recv_buf_len = 0;
