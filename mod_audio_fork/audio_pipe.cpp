@@ -134,12 +134,13 @@ int AudioPipe::lws_callback(struct lws *wsi,
     case LWS_CALLBACK_CLIENT_RECEIVE:
       {
         AudioPipe* ap = *ppAp;
+        int is_binary = lws_frame_is_binary(wsi);
         if (!ap) {
           lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE %s unable to find wsi %p..\n", ap->m_uuid.c_str(), wsi); 
           return 0;
         }
 
-        if (lws_frame_is_binary(wsi)) {
+        if ( is_binary && ap->bidirectional_audio_sample_rate() <= 0) {
           lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE received binary frame, discarding.\n");
           return 0;
         }
@@ -178,11 +179,9 @@ int AudioPipe::lws_callback(struct lws *wsi,
             ap->m_recv_buf_ptr += len;
           }
           if (lws_is_final_fragment(wsi)) {
-            if (nullptr != ap->m_recv_buf) {
-              std::string msg((char *)ap->m_recv_buf, ap->m_recv_buf_ptr - ap->m_recv_buf);
-              ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::MESSAGE, msg.c_str());
-              if (nullptr != ap->m_recv_buf) free(ap->m_recv_buf);
-            }
+            std::string msg((char *)ap->m_recv_buf, ap->m_recv_buf_ptr - ap->m_recv_buf);
+            ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), is_binary ? AudioPipe::MESSAGE : AudioPipe::BINARY , msg.c_str());
+            free(ap->m_recv_buf);
             ap->m_recv_buf = ap->m_recv_buf_ptr = nullptr;
             ap->m_recv_buf_len = 0;
           }
@@ -458,7 +457,8 @@ bool AudioPipe::deinitialize() {
 
 // instance members
 AudioPipe::AudioPipe(const char* uuid, const char* host, unsigned int port, const char* path,
-  int sslFlags, size_t bufLen, size_t minFreespace, const char* username, const char* password, char* bugname, notifyHandler_t callback) :
+  int sslFlags, size_t bufLen, size_t minFreespace, const char* username, const char* password, char* bugname,
+  int bidirectional_audio, notifyHandler_t callback) :
   m_uuid(uuid), m_host(host), m_port(port), m_path(path), m_sslFlags(sslFlags),
   m_audio_buffer_min_freespace(minFreespace), m_audio_buffer_max_len(bufLen), m_gracefulShutdown(false),
   m_audio_buffer_write_offset(LWS_PRE), m_recv_buf(nullptr), m_recv_buf_ptr(nullptr), m_bugname(bugname),
@@ -468,7 +468,7 @@ AudioPipe::AudioPipe(const char* uuid, const char* host, unsigned int port, cons
     m_username.assign(username);
     m_password.assign(password);
   }
-
+  m_bidirectional_audio = bidirectional_audio > 0;
   m_audio_buffer = new uint8_t[m_audio_buffer_max_len];
 }
 AudioPipe::~AudioPipe() {

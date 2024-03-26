@@ -27,7 +27,8 @@ namespace drachtio {
       CONNECT_FAIL,
       CONNECTION_DROPPED,
       CONNECTION_CLOSED_GRACEFULLY,
-      MESSAGE
+      MESSAGE,
+      BINARY
     };
     typedef void (*log_emit_function)(int level, const char *line);
     typedef void (*notifyHandler_t)(const char *sessionId, const char* bugname, NotifyEvent_t event, const char* message);
@@ -44,7 +45,8 @@ namespace drachtio {
 
     // constructor
     AudioPipe(const char* uuid, const char* host, unsigned int port, const char* path, int sslFlags, 
-      size_t bufLen, size_t minFreespace, const char* username, const char* password, char* bugname, notifyHandler_t callback);
+      size_t bufLen, size_t minFreespace, const char* username, const char* password, char* bugname,
+      int bidirectional_audio, notifyHandler_t callback);
     ~AudioPipe();  
 
     LwsState_t getLwsState(void) { return m_state; }
@@ -81,6 +83,10 @@ namespace drachtio {
     void do_graceful_shutdown();
     bool isGracefulShutdown(void) {
       return m_gracefulShutdown;
+    }
+
+    bool bidirectional_audio_sample_rate() {
+      return m_bidirectional_audio;
     }
 
     void close() ;
@@ -142,6 +148,7 @@ namespace drachtio {
     std::string m_username;
     std::string m_password;
     bool m_gracefulShutdown;
+    bool m_bidirectional_audio;
   };
 
 } // namespace drachtio
