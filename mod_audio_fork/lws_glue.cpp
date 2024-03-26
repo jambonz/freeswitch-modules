@@ -17,6 +17,7 @@
 #include "parser.hpp"
 #include "mod_audio_fork.h"
 #include "audio_pipe.hpp"
+#include "dub_glue.h"
 
 #define RTP_PACKETIZATION_PERIOD 20
 #define FRAME_SIZE_8000  320 /*which means each 20ms frame as 320 bytes at 8 khz (1 channel only)*/
@@ -31,6 +32,77 @@ namespace {
   static unsigned int idxCallCount = 0;
   static uint32_t playCount = 0;
 
+  void write_audio_file(private_t* tech_pvt, switch_core_session_t* session, cJSON* jsonData) {
+    cJSON* jsonFile = NULL;
+    cJSON* jsonAudio = cJSON_DetachItemFromObject(jsonData, "audioContent");
+    int validAudio = (jsonAudio && NULL != jsonAudio->valuestring);
+
+    const char* szAudioContentType = cJSON_GetObjectCstr(jsonData, "audioContentType");
+    char fileType[6];
+    int sampleRate = 16000;
+    if (0 == strcmp(szAudioContentType, "raw")) {
+      cJSON* jsonSR = cJSON_GetObjectItem(jsonData, "sampleRate");
+      sampleRate = jsonSR && jsonSR->valueint ? jsonSR->valueint : 0;
+
+      switch(sampleRate) {
+        case 8000:
+          strcpy(fileType, ".r8");
+          break;
+        case 16000:
+          strcpy(fileType, ".r16");
+          break;
+        case 24000:
+          strcpy(fileType, ".r24");
+          break;
+        case 32000:
+          strcpy(fileType, ".r32");
+          break;
+        case 48000:
+          strcpy(fileType, ".r48");
+          break;
+        case 64000:
+          strcpy(fileType, ".r64");
+          break;
+        default:
+          strcpy(fileType, ".r16");
+          break;
+      }
+    }
+    else if (0 == strcmp(szAudioContentType, "wave") || 0 == strcmp(szAudioContentType, "wav")) {
+      strcpy(fileType, ".wav");
+    }
+    else {
+      validAudio = 0;
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) processIncomingMessage - unsupported audioContentType: %s\n", tech_pvt->id, szAudioContentType);
+    }
+
+    if (validAudio) {
+      char szFilePath[256];
+
+      std::string rawAudio = drachtio::base64_decode(jsonAudio->valuestring);
+      switch_snprintf(szFilePath, 256, "%s%s%s_%d.tmp%s", SWITCH_GLOBAL_dirs.temp_dir, 
+        SWITCH_PATH_SEPARATOR, tech_pvt->sessionId, playCount++, fileType);
+      std::ofstream f(szFilePath, std::ofstream::binary);
+      f << rawAudio;
+      f.close();
+
+      // add the file to the list of files played for this session, we'll delete when session closes
+      struct playout* playout = (struct playout *) malloc(sizeof(struct playout));
+      playout->file = (char *) malloc(strlen(szFilePath) + 1);
+      strcpy(playout->file, szFilePath);
+      playout->next = tech_pvt->playout;
+      tech_pvt->playout = playout;
+
+      jsonFile = cJSON_CreateString(szFilePath);
+      cJSON_AddItemToObject(jsonData, "file", jsonFile);
+    }
+
+    char* jsonString = cJSON_PrintUnformatted(jsonData);
+    tech_pvt->responseHandler(session, EVENT_PLAY_AUDIO, jsonString);
+    free(jsonString);
+    if (jsonAudio) cJSON_Delete(jsonAudio);
+  }
+
   void processIncomingMessage(private_t* tech_pvt, switch_core_session_t* session, const char* message) {
     std::string msg = message;
     std::string type;
@@ -41,74 +113,20 @@ namespace {
       if (0 == type.compare("playAudio")) {
         if (jsonData) {
           // dont send actual audio bytes in event message
-          cJSON* jsonFile = NULL;
-          cJSON* jsonAudio = cJSON_DetachItemFromObject(jsonData, "audioContent");
-          int validAudio = (jsonAudio && NULL != jsonAudio->valuestring);
+          cJSON* jsonUrl = cJSON_DetachItemFromObject(jsonData, "url");
+          if (jsonUrl != NULL) {
+            int validUrl = (jsonUrl && NULL != jsonUrl->valuestring);
+            if (validUrl) {
+              cJSON* jsonGain = cJSON_GetObjectItem(jsonData, "gain");
+              int gain = jsonGain && jsonGain->valueint ? jsonGain->valueint : 0;
+              cJSON* jsonLoop = cJSON_GetObjectItem(jsonData, "loop");
+              int loop = jsonGain && jsonGain->valueint ? jsonGain->valueint : 0;
 
-          const char* szAudioContentType = cJSON_GetObjectCstr(jsonData, "audioContentType");
-          char fileType[6];
-          int sampleRate = 16000;
-          if (0 == strcmp(szAudioContentType, "raw")) {
-            cJSON* jsonSR = cJSON_GetObjectItem(jsonData, "sampleRate");
-            sampleRate = jsonSR && jsonSR->valueint ? jsonSR->valueint : 0;
-
-            switch(sampleRate) {
-              case 8000:
-                strcpy(fileType, ".r8");
-                break;
-              case 16000:
-                strcpy(fileType, ".r16");
-                break;
-              case 24000:
-                strcpy(fileType, ".r24");
-                break;
-              case 32000:
-                strcpy(fileType, ".r32");
-                break;
-              case 48000:
-                strcpy(fileType, ".r48");
-                break;
-              case 64000:
-                strcpy(fileType, ".r64");
-                break;
-              default:
-                strcpy(fileType, ".r16");
-                break;
+              play_dub(tech_pvt, jsonUrl->valuestring, gain, loop);
             }
+          } else {
+            write_audio_file(tech_pvt, session, jsonData);
           }
-          else if (0 == strcmp(szAudioContentType, "wave") || 0 == strcmp(szAudioContentType, "wav")) {
-            strcpy(fileType, ".wav");
-          }
-          else {
-            validAudio = 0;
-            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) processIncomingMessage - unsupported audioContentType: %s\n", tech_pvt->id, szAudioContentType);
-          }
-
-          if (validAudio) {
-            char szFilePath[256];
-
-            std::string rawAudio = drachtio::base64_decode(jsonAudio->valuestring);
-            switch_snprintf(szFilePath, 256, "%s%s%s_%d.tmp%s", SWITCH_GLOBAL_dirs.temp_dir, 
-              SWITCH_PATH_SEPARATOR, tech_pvt->sessionId, playCount++, fileType);
-            std::ofstream f(szFilePath, std::ofstream::binary);
-            f << rawAudio;
-            f.close();
-
-            // add the file to the list of files played for this session, we'll delete when session closes
-            struct playout* playout = (struct playout *) malloc(sizeof(struct playout));
-            playout->file = (char *) malloc(strlen(szFilePath) + 1);
-            strcpy(playout->file, szFilePath);
-            playout->next = tech_pvt->playout;
-            tech_pvt->playout = playout;
-
-            jsonFile = cJSON_CreateString(szFilePath);
-            cJSON_AddItemToObject(jsonData, "file", jsonFile);
-          }
-
-          char* jsonString = cJSON_PrintUnformatted(jsonData);
-          tech_pvt->responseHandler(session, EVENT_PLAY_AUDIO, jsonString);
-          free(jsonString);
-          if (jsonAudio) cJSON_Delete(jsonAudio);
         }
         else {
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "(%u) processIncomingMessage - missing data payload in playAudio request\n", tech_pvt->id); 
@@ -392,18 +410,18 @@ extern "C" {
   }
 
   switch_status_t fork_session_init(switch_core_session_t *session, 
-              responseHandler_t responseHandler,
-              uint32_t samples_per_second, 
-              char *host,
-              unsigned int port,
-              char *path,
-              int sampling,
-              int sslFlags,
-              int channels,
-              char *bugname,
-              char* metadata, 
-              void **ppUserData)
-  {    	
+    responseHandler_t responseHandler,
+    uint32_t samples_per_second, 
+    char *host,
+    unsigned int port,
+    char *path,
+    int sampling,
+    int sslFlags,
+    int channels,
+    char *bugname,
+    char* metadata, 
+    void **ppUserData)
+  {
     int err;
 
     // allocate per-session data structure

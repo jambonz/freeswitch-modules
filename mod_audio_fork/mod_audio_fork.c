@@ -5,6 +5,7 @@
  */
 #include "mod_audio_fork.h"
 #include "lws_glue.h"
+#include "dub_glue.h"
 
 //static int mod_running = 0;
 
@@ -27,29 +28,32 @@ static void responseHandler(switch_core_session_t* session, const char * eventNa
 
 static switch_bool_t capture_callback(switch_media_bug_t *bug, void *user_data, switch_abc_type_t type)
 {
+	switch_bool_t ret = SWITCH_TRUE;
 	switch_core_session_t *session = switch_core_media_bug_get_session(bug);
+	private_t* tech_pvt = (private_t *)  switch_core_media_bug_get_user_data(bug);
 	switch (type) {
 	case SWITCH_ABC_TYPE_INIT:
 		break;
 
 	case SWITCH_ABC_TYPE_CLOSE:
 		{
-      private_t* tech_pvt = (private_t *)  switch_core_media_bug_get_user_data(bug);
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "Got SWITCH_ABC_TYPE_CLOSE for bug %s\n", tech_pvt->bugname);
       fork_session_cleanup(session, tech_pvt->bugname, NULL, 1);
+			dub_session_cleanup(session, 1, bug);
 		}
 		break;
 	
 	case SWITCH_ABC_TYPE_READ:
-		return fork_frame(session, bug);
+		ret = fork_frame(session, bug);
 		break;
 
 	case SWITCH_ABC_TYPE_WRITE:
+		ret = dub_speech_frame(bug, tech_pvt);
 	default:
 		break;
 	}
 
-	return SWITCH_TRUE;
+	return ret;
 }
 
 static switch_status_t start_capture(switch_core_session_t *session, 
@@ -92,6 +96,12 @@ static switch_status_t start_capture(switch_core_session_t *session,
 		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Error initializing mod_audio_fork session.\n");
 		return SWITCH_STATUS_FALSE;
 	}
+
+	if (SWITCH_STATUS_FALSE == dub_init(pUserData, read_codec->implementation->actual_samples_per_second)) {
+		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Error initializing dub_init session.\n");
+		return SWITCH_STATUS_FALSE;
+	}
+
 	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "adding bug %s.\n", bugname);
 	if ((status = switch_core_media_bug_add(session, bugname, NULL, capture_callback, pUserData, 0, flags, &bug)) != SWITCH_STATUS_SUCCESS) {
 		return status;
@@ -231,7 +241,7 @@ SWITCH_STANDARD_API(fork_function)
         unsigned int port;
         int sslFlags;
         int sampling = 8000;
-      	switch_media_bug_flag_t flags = SMBF_READ_STREAM ;
+      	switch_media_bug_flag_t flags = SMBF_READ_STREAM | SMBF_WRITE_REPLACE;
         char *metadata = NULL;
         if( argc > 6) {
           bugname = argv[5];
@@ -334,6 +344,8 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_audio_fork_load)
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_audio_fork_shutdown)
 {
 	fork_cleanup();
+
+	dub_cleanup();
   //mod_running = 0;
 	switch_event_free_subclass(EVENT_TRANSCRIPTION);
 	switch_event_free_subclass(EVENT_TRANSFER);
