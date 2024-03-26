@@ -140,7 +140,7 @@ int AudioPipe::lws_callback(struct lws *wsi,
           return 0;
         }
 
-        if ( is_binary && ap->is_bidirectional_audio() <= 0) {
+        if ( is_binary && !ap->is_bidirectional_audio()) {
           lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE received binary frame, discarding.\n");
           return 0;
         }
