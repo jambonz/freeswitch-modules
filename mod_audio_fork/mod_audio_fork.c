@@ -276,7 +276,6 @@ SWITCH_STANDARD_API(fork_function)
         if( argc > 6 && !strcmp(argv[6], "bi_audio_sample_rate=")) {
           bugname = argv[5];
           metadata = argv[6];
-					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "xhoaluu %s\n", argv[6]);
         }
         else if (argc > 5) {
           if (argv[5][0] == '{' || argv[5][0] == '[') metadata = argv[5];

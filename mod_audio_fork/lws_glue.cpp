@@ -205,7 +205,7 @@ namespace {
     }
   }
 
-  static void eventCallback(const char* sessionId, const char* bugname, drachtio::AudioPipe::NotifyEvent_t event, const char* message) {
+  static void eventCallback(const char* sessionId, const char* bugname, drachtio::AudioPipe::NotifyEvent_t event, const char* message, const char* binary) {
     switch_core_session_t* session = switch_core_session_locate(sessionId);
     if (session) {
       switch_channel_t *channel = switch_core_session_get_channel(session);
@@ -248,7 +248,7 @@ namespace {
               processIncomingMessage(tech_pvt, session, message);
             break;
             case drachtio::AudioPipe::BINARY:
-            processIncomingBinary(tech_pvt, session, message);
+            processIncomingBinary(tech_pvt, session, binary);
             break;
           }
         }
@@ -708,6 +708,7 @@ extern "C" {
 
       int samplesToCopy = std::min(static_cast<int>(cBuffer->size()), static_cast<int>(rframe->samples));
       std::copy_n(cBuffer->begin(), samplesToCopy, data);
+      cBuffer->erase(cBuffer->begin(), cBuffer->begin() + samplesToCopy);
 
       if (samplesToCopy > 0) {
         vector_add(fp, data, rframe->samples);

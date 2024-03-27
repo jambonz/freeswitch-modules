@@ -31,7 +31,7 @@ namespace drachtio {
       BINARY
     };
     typedef void (*log_emit_function)(int level, const char *line);
-    typedef void (*notifyHandler_t)(const char *sessionId, const char* bugname, NotifyEvent_t event, const char* message);
+    typedef void (*notifyHandler_t)(const char *sessionId, const char* bugname, NotifyEvent_t event, const char* message, const char* binary);
 
     struct lws_per_vhost_data {
       struct lws_context *context;
