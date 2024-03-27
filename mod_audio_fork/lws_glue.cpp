@@ -43,8 +43,6 @@ namespace {
     uint16_t* data_uint16 = reinterpret_cast<uint16_t*>(data);
     std::vector<uint16_t> pcm_data(data_uint16, data_uint16 + dataLength / sizeof(uint16_t));
 
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "xquanluu adding new %d to existing buffer size %d\n", dataLength, cBuffer->size());
-
 
     if (tech_pvt->bidirectional_audio_resampler) {
       std::vector<int16_t> in(pcm_data.begin(), pcm_data.end());
@@ -709,7 +707,6 @@ extern "C" {
 
       int samplesToCopy = std::min(static_cast<int>(cBuffer->size()), static_cast<int>(rframe->samples));
 
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "xquanluu getting %d from existing buffer size %d\n", samplesToCopy, cBuffer->size());
       std::copy_n(cBuffer->begin(), samplesToCopy, data);
       cBuffer->erase(cBuffer->begin(), cBuffer->begin() + samplesToCopy);
 
