@@ -37,12 +37,13 @@ namespace {
   static unsigned int idxCallCount = 0;
   static uint32_t playCount = 0;
 
-  switch_status_t processIncomingBinary(private_t* tech_pvt, switch_core_session_t* session, const char* message) {
+  switch_status_t processIncomingBinary(private_t* tech_pvt, switch_core_session_t* session, const char* message, size_t dataLength) {
     CircularBuffer_t *cBuffer = (CircularBuffer_t *) tech_pvt->circularBuffer;
     uint8_t* data = reinterpret_cast<uint8_t*>(const_cast<char*>(message));
-    int dataLength = strlen(message);
     uint16_t* data_uint16 = reinterpret_cast<uint16_t*>(data);
     std::vector<uint16_t> pcm_data(data_uint16, data_uint16 + dataLength / sizeof(uint16_t));
+
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "xquanluu adding new %d to existing buffer size %d\n", dataLength, cBuffer->size());
 
 
     if (tech_pvt->bidirectional_audio_resampler) {
@@ -205,7 +206,7 @@ namespace {
     }
   }
 
-  static void eventCallback(const char* sessionId, const char* bugname, drachtio::AudioPipe::NotifyEvent_t event, const char* message, const char* binary) {
+  static void eventCallback(const char* sessionId, const char* bugname, drachtio::AudioPipe::NotifyEvent_t event, const char* message, const char* binary, size_t len) {
     switch_core_session_t* session = switch_core_session_locate(sessionId);
     if (session) {
       switch_channel_t *channel = switch_core_session_get_channel(session);
@@ -248,7 +249,7 @@ namespace {
               processIncomingMessage(tech_pvt, session, message);
             break;
             case drachtio::AudioPipe::BINARY:
-            processIncomingBinary(tech_pvt, session, binary);
+            processIncomingBinary(tech_pvt, session, binary, len);
             break;
           }
         }
@@ -707,6 +708,8 @@ extern "C" {
       memset(data, 0, sizeof(data));
 
       int samplesToCopy = std::min(static_cast<int>(cBuffer->size()), static_cast<int>(rframe->samples));
+
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "xquanluu getting %d from existing buffer size %d\n", samplesToCopy, cBuffer->size());
       std::copy_n(cBuffer->begin(), samplesToCopy, data);
       cBuffer->erase(cBuffer->begin(), cBuffer->begin() + samplesToCopy);
 
