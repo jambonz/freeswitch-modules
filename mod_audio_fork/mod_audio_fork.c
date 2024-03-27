@@ -45,8 +45,11 @@ static switch_bool_t capture_callback(switch_media_bug_t *bug, void *user_data, 
 		ret = fork_frame(session, bug);
 		break;
 
-	case SWITCH_ABC_TYPE_WRITE:
+	case SWITCH_ABC_TYPE_WRITE_REPLACE:
 		ret = dub_speech_frame(bug, tech_pvt);
+	break;
+
+	case SWITCH_ABC_TYPE_WRITE:
 	default:
 		break;
 	}
@@ -173,7 +176,17 @@ static switch_status_t send_text(switch_core_session_t *session, char* bugname, 
   return status;
 }
 
-#define FORK_API_SYNTAX "<uuid> [start | stop | send_text | pause | resume | graceful-shutdown | stop_play ] [wss-url | path] [mono | mixed | stereo] [8000 | 16000 | 24000 | 32000 | 64000] [bugname] [metadata] [bidirectional-sample-rate]"
+static char* extractParam(char** argv, const char* key) {
+    int key_len = strlen(key);
+    for (int i = 0; argv[i] != NULL; ++i) {
+        if (strncmp(argv[i], key, key_len) == 0) {
+            return argv[i] + key_len;
+        }
+    }
+    return NULL;
+}
+
+#define FORK_API_SYNTAX "<uuid> [start | stop | send_text | pause | resume | graceful-shutdown | stop_play ] [wss-url | path] [mono | mixed | stereo] [8000 | 16000 | 24000 | 32000 | 64000] [bugname] [metadata] [bi_audio_sample_rate=<samplerate>]"
 SWITCH_STANDARD_API(fork_function)
 {
 	char *mycmd = NULL, *argv[8] = { 0 };
@@ -247,24 +260,29 @@ SWITCH_STANDARD_API(fork_function)
         char host[MAX_WS_URL_LEN], path[MAX_PATH_LEN];
         unsigned int port;
         int sslFlags;
-				int bidirectional_audio_sample_rate = 0;
+				
         int sampling = 8000;
       	switch_media_bug_flag_t flags = SMBF_READ_STREAM;
         char *metadata = NULL;
-				if (argc > 7) {
-					bidirectional_audio_sample_rate = atoi(argv[7]);
+				int bidirectional_audio_sample_rate = 0;
+				char *bdrate = extractParam(argv, "bi_audio_sample_rate=");
+				if (bdrate) {
+					bidirectional_audio_sample_rate = atoi(bdrate);
 					if (bidirectional_audio_sample_rate > 0) {
 						flags |= SMBF_WRITE_REPLACE;
-					}
+					} 
 				}
-        if( argc > 6) {
+				
+        if( argc > 6 && !strcmp(argv[6], "bi_audio_sample_rate=")) {
           bugname = argv[5];
           metadata = argv[6];
+					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "xhoaluu %s\n", argv[6]);
         }
         else if (argc > 5) {
           if (argv[5][0] == '{' || argv[5][0] == '[') metadata = argv[5];
           else bugname = argv[5];
         }
+
         if (0 == strcmp(argv[3], "mixed")) {
           flags |= SMBF_WRITE_STREAM ;
         }

@@ -44,6 +44,7 @@ namespace {
     uint16_t* data_uint16 = reinterpret_cast<uint16_t*>(data);
     std::vector<uint16_t> pcm_data(data_uint16, data_uint16 + dataLength / sizeof(uint16_t));
 
+
     if (tech_pvt->bidirectional_audio_resampler) {
       std::vector<int16_t> in(pcm_data.begin(), pcm_data.end());
 
@@ -61,7 +62,6 @@ namespace {
       pcm_data.resize(out_len);
       memcpy(pcm_data.data(), out.data(), out_len * sizeof(int16_t));
     }
-
     switch_mutex_lock(tech_pvt->mutex);
 
     // Resize the buffer if necessary
@@ -72,7 +72,6 @@ namespace {
 
       cBuffer->set_capacity(cBuffer->size() + std::max(bytesResampled / sizeof(uint16_t), (size_t)BUFFER_GROW_SIZE));
     }
-
     // Push the data into the buffer.
     cBuffer->insert(cBuffer->end(), pcm_data.begin(), pcm_data.end());
 
@@ -317,7 +316,7 @@ namespace {
       switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "(%u) no resampling needed for this call\n", tech_pvt->id);
     }
 
-    if (sampling != bidirectional_audio_sample_rate) {
+    if (bidirectional_audio_sample_rate && sampling != bidirectional_audio_sample_rate) {
       switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "(%u) bidirectional audio resampling from %u to %u\n", tech_pvt->id, bidirectional_audio_sample_rate, sampling);
       tech_pvt->bidirectional_audio_resampler = speex_resampler_init(channels, bidirectional_audio_sample_rate, sampling, SWITCH_RESAMPLE_QUALITY, &err);
       if (0 != err) {
@@ -475,8 +474,9 @@ extern "C" {
     int channels,
     char *bugname,
     char* metadata, 
-    void **ppUserData,
-    int bidirectional_audio_sample_rate)
+    int bidirectional_audio_sample_rate,
+    void **ppUserData
+    )
   {
     int err;
 
@@ -712,7 +712,6 @@ extern "C" {
       if (samplesToCopy > 0) {
         vector_add(fp, data, rframe->samples);
       }
-
       vector_normalize(fp, rframe->samples);
 
       switch_core_media_bug_set_write_replace_frame(bug, rframe);
