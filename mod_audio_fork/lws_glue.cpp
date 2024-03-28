@@ -86,7 +86,10 @@ namespace {
     if (json) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) processIncomingMessage - received %s message\n", tech_pvt->id, type.c_str());
       cJSON* jsonData = cJSON_GetObjectItem(json, "data");
-      if (0 == type.compare("playAudio")) {
+      if (0 == type.compare("playAudio") &&
+        // playAudio is enabled and there is no bidirectional audio from stream is enabled.
+        tech_pvt->bidirectional_audio_enable &&
+        !tech_pvt->bidirectional_audio_stream) {
         if (jsonData) {
           // dont send actual audio bytes in event message
           cJSON* jsonFile = NULL;
@@ -257,11 +260,13 @@ namespace {
   }
   switch_status_t fork_data_init(private_t *tech_pvt, switch_core_session_t *session, char * host, 
     unsigned int port, char* path, int sslFlags, int sampling, int desiredSampling, int channels, 
-    char *bugname, char* metadata, int bidirectional_audio_sample_rate, responseHandler_t responseHandler) {
+    char *bugname, char* metadata, int bidirectional_audio_enable,
+    int bidirectional_audio_stream, int bidirectional_audio_sample_rate, responseHandler_t responseHandler) {
 
     const char* username = nullptr;
     const char* password = nullptr;
     int err;
+    int bidirectional_audio_stream_enable = bidirectional_audio_enable + bidirectional_audio_stream;
     switch_codec_implementation_t read_impl;
     switch_channel_t *channel = switch_core_session_get_channel(session);
 
@@ -286,6 +291,8 @@ namespace {
     tech_pvt->audio_paused = 0;
     tech_pvt->graceful_shutdown = 0;
     tech_pvt->circularBuffer = (void *) new CircularBuffer_t(8192);
+    tech_pvt->bidirectional_audio_enable = bidirectional_audio_enable;
+    tech_pvt->bidirectional_audio_stream = bidirectional_audio_stream;
     tech_pvt->bidirectional_audio_sample_rate = bidirectional_audio_sample_rate;
     strncpy(tech_pvt->bugname, bugname, MAX_BUG_LEN);
     if (metadata) strncpy(tech_pvt->initialMetadata, metadata, MAX_METADATA_LEN);
@@ -293,7 +300,7 @@ namespace {
     size_t buflen = LWS_PRE + (FRAME_SIZE_8000 * desiredSampling / 8000 * channels * 1000 / RTP_PACKETIZATION_PERIOD * nAudioBufferSecs);
 
     drachtio::AudioPipe* ap = new drachtio::AudioPipe(tech_pvt->sessionId, host, port, path, sslFlags, 
-      buflen, read_impl.decoded_bytes_per_packet, username, password, bugname, bidirectional_audio_sample_rate, eventCallback);
+      buflen, read_impl.decoded_bytes_per_packet, username, password, bugname, bidirectional_audio_stream_enable, eventCallback);
     if (!ap) {
       switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Error allocating AudioPipe\n");
       return SWITCH_STATUS_FALSE;
@@ -472,7 +479,9 @@ extern "C" {
     int sslFlags,
     int channels,
     char *bugname,
-    char* metadata, 
+    char* metadata,
+    int bidirectional_audio_enable,
+    int bidirectional_audio_stream,
     int bidirectional_audio_sample_rate,
     void **ppUserData
     )
@@ -487,7 +496,7 @@ extern "C" {
     }
 
     if (SWITCH_STATUS_SUCCESS != fork_data_init(tech_pvt, session, host, port, path, sslFlags, samples_per_second, sampling, channels, 
-      bugname, metadata, bidirectional_audio_sample_rate, responseHandler)) {
+      bugname, metadata, bidirectional_audio_enable, bidirectional_audio_stream, bidirectional_audio_sample_rate, responseHandler)) {
       destroy_tech_pvt(tech_pvt);
       return SWITCH_STATUS_FALSE;
     }

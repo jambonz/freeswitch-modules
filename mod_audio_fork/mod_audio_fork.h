@@ -54,6 +54,8 @@ struct private_data {
   char initialMetadata[8192];
   void *circularBuffer;
   SpeexResamplerState *bidirectional_audio_resampler;
+  int bidirectional_audio_enable;
+	int bidirectional_audio_stream;
   int bidirectional_audio_sample_rate;
 };
 

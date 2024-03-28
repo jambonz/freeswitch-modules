@@ -86,7 +86,7 @@ namespace drachtio {
     }
 
     bool is_bidirectional_audio() {
-      return m_bidirectional_audio;
+      return m_bidirectional_audio_stream;
     }
 
     void close() ;
@@ -148,7 +148,7 @@ namespace drachtio {
     std::string m_username;
     std::string m_password;
     bool m_gracefulShutdown;
-    bool m_bidirectional_audio;
+    bool m_bidirectional_audio_stream;
   };
 
 } // namespace drachtio
