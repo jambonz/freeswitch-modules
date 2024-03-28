@@ -179,16 +179,6 @@ static switch_status_t send_text(switch_core_session_t *session, char* bugname, 
   return status;
 }
 
-static char* extractParam(char** argv, const char* key) {
-    int key_len = strlen(key);
-    for (int i = 0; argv[i] != NULL; ++i) {
-        if (strncmp(argv[i], key, key_len) == 0) {
-            return argv[i] + key_len;
-        }
-    }
-    return NULL;
-}
-
 #define FORK_API_SYNTAX "<uuid> [start | stop | send_text | pause | resume | graceful-shutdown | stop_play ] [wss-url | path] [mono | mixed | stereo] [8000 | 16000 | 24000 | 32000 | 64000] [bugname] [metadata] [bidrectionalAduo_enabled] [bidrectionalAduo_stream_enabled] [bidrectionalAduo_stream_samplerate]"
 SWITCH_STANDARD_API(fork_function)
 {
@@ -270,24 +260,18 @@ SWITCH_STANDARD_API(fork_function)
 				int bidirectional_audio_enable = 1;
 				int bidirectional_audio_stream = 0;
 				int bidirectional_audio_sample_rate = 0;
-				char *bdrate = extractParam(argv, "bi_audio_sample_rate=");
-				if (bdrate) {
-					bidirectional_audio_sample_rate = atoi(bdrate);
-					if (bidirectional_audio_sample_rate > 0) {
-						flags |= SMBF_WRITE_REPLACE;
-					} 
-				}
 				// Expecting that bidirectional audio params is always received together with bugname and metadata even they are empty string
 				if (argc > 9) {
-					if (argv[5][0] == '\0') {
+					if (argv[5][0] != '\0') {
 						bugname = argv[5];
 					}
-					if (argv[6][0] == '\0') {
+					if (argv[6][0] != '\0') {
 						metadata = argv[6];
 					}
-					bidirectional_audio_enable = atoi(argv[7]);
-					bidirectional_audio_stream = atoi(argv[8]);
+					bidirectional_audio_enable = !strcmp(argv[7], "true") ? 1 : 0;
+					bidirectional_audio_stream = !strcmp(argv[8], "true") ? 1 : 0;
 					bidirectional_audio_sample_rate = atoi(argv[9]);
+
 					if (bidirectional_audio_enable &&
 						bidirectional_audio_stream &&
 						bidirectional_audio_sample_rate) {
