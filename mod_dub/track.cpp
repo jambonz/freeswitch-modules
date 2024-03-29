@@ -26,12 +26,20 @@ void Track::onPlayDone(bool hasError, const std::string& errMsg) {
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Track::onPlayDone %s\n", _trackName.c_str());
 
   if (!_stopping) {
+    std::shared_ptr<AudioProducer> apDone, apNext;  // to retain a ref so the ap is not destroyed while under lock below -- avoid deadlock
+  
     if (hasError) switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "onPlayDone: error: %s\n", errMsg.c_str());
-    std::lock_guard<std::mutex> lock(_mutex);
-    _apQueue.pop();
-    if (!_apQueue.empty()) {
+    {
+      std::lock_guard<std::mutex> lock(_mutex);
+      if (!_apQueue.empty()) {
+        apDone = _apQueue.front();
+        _apQueue.pop();
+      }
+       if (!_apQueue.empty()) apNext = _apQueue.front();      
+    }
+    if (apNext) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "onPlayDone: starting queued audio on track %s\n", _trackName.c_str());
-      _apQueue.front()->start(std::bind(&Track::onPlayDone, this, std::placeholders::_1, std::placeholders::_2));
+      apNext->start(std::bind(&Track::onPlayDone, this, std::placeholders::_1, std::placeholders::_2));
     }
   }
   else {
@@ -50,11 +58,17 @@ void Track::queueFileAudio(const std::string& path, int gain, bool loop) {
     _apQueue.push(ap);
     startIt = _apQueue.size() == 1;
   }
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
+    "queueFileAudio: queue file %s on track %s\n", _trackName.c_str(), path.c_str());
 
   if (startIt) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
+      "queueFileAudio: track %s starting queued file as none are in progress\n", _trackName.c_str());
     try {
       ap->start(std::bind(&Track::onPlayDone, this, std::placeholders::_1, std::placeholders::_2));
     } catch (std::exception& e) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, 
+        "queueFileAudio: track %s error starting %s: %s\n", _trackName.c_str(), path.c_str(), e.what());
       onPlayDone(true, e.what());
     }
   }

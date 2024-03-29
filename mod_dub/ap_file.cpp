@@ -58,7 +58,7 @@ AudioProducerFile::AudioProducerFile(
   std::mutex& mutex,
   CircularBuffer_t& circularBuffer,
   int sampleRate
-) : AudioProducer(mutex, circularBuffer, sampleRate), _timer(io_service), _mh(nullptr) {
+) : AudioProducer(mutex, circularBuffer, sampleRate), _timer(io_service), _mh(nullptr), _fp(nullptr) {
 
   AudioProducerFile::_init();
 }
@@ -176,16 +176,19 @@ void AudioProducerFile::stop() {
 }
 
 void AudioProducerFile::reset() {
+  {
+    std::lock_guard<std::mutex> lock(_mutex);
     if (_fp) {
-    fclose(_fp);
-    _fp = nullptr;
+      fclose(_fp);
+      _fp = nullptr;
+    }
+    if (_mh) {
+      mpg123_close(_mh);
+      mpg123_delete(_mh);
+      _mh = nullptr;
+    }
   }
-  if (_mh) {
-    mpg123_close(_mh);
-    mpg123_delete(_mh);
-    _mh = nullptr;
-  }
-    _timer.cancel();
+  _timer.cancel();
   _status = Status_t::STATUS_NONE;
 }
 
