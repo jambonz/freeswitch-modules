@@ -141,7 +141,7 @@ int AudioPipe::lws_callback(struct lws *wsi,
           return 0;
         }
         
-        if ( lws_frame_is_binary(wsi)) {
+        if (lws_frame_is_binary(wsi)) {
           if (ap->is_bidirectional_audio_stream()) {
             ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::BINARY, NULL, (char *) in, len);
           } else {
