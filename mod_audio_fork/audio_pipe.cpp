@@ -184,9 +184,11 @@ int AudioPipe::lws_callback(struct lws *wsi,
             ap->m_recv_buf_ptr += len;
           }
           if (lws_is_final_fragment(wsi)) {
-            std::string msg((char *)ap->m_recv_buf, ap->m_recv_buf_ptr - ap->m_recv_buf);
-            ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::MESSAGE, msg.c_str(), NULL, len);
-            free(ap->m_recv_buf);
+            if (nullptr != ap->m_recv_buf) {
+              std::string msg((char *)ap->m_recv_buf, ap->m_recv_buf_ptr - ap->m_recv_buf);
+              ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::MESSAGE, msg.c_str());
+              if (nullptr != ap->m_recv_buf) free(ap->m_recv_buf);
+            }
             ap->m_recv_buf = ap->m_recv_buf_ptr = nullptr;
             ap->m_recv_buf_len = 0;
           }
@@ -473,7 +475,7 @@ AudioPipe::AudioPipe(const char* uuid, const char* host, unsigned int port, cons
     m_username.assign(username);
     m_password.assign(password);
   }
-  m_bidirectional_audio_stream = bidirectional_audio_stream > 0;
+  m_bidirectional_audio_stream = bidirectional_audio_stream;
   m_audio_buffer = new uint8_t[m_audio_buffer_max_len];
 }
 AudioPipe::~AudioPipe() {

@@ -179,7 +179,7 @@ static switch_status_t send_text(switch_core_session_t *session, char* bugname, 
   return status;
 }
 
-#define FORK_API_SYNTAX "<uuid> [start | stop | send_text | pause | resume | graceful-shutdown | stop_play ] [wss-url | path] [mono | mixed | stereo] [8000 | 16000 | 24000 | 32000 | 64000] [bugname] [metadata] [bidrectionalAduo_enabled] [bidrectionalAduo_stream_enabled] [bidrectionalAduo_stream_samplerate]"
+#define FORK_API_SYNTAX "<uuid> [start | stop | send_text | pause | resume | graceful-shutdown | stop_play ] [wss-url | path] [mono | mixed | stereo] [8000 | 16000 | 24000 | 32000 | 64000] [bugname] [metadata] [bidirectionalAudio_enabled] [bidirectionalAudio_stream_enabled] [bidirectionalAudio_stream_samplerate]"
 SWITCH_STANDARD_API(fork_function)
 {
 	char *mycmd = NULL, *argv[10] = { 0 };
