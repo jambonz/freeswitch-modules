@@ -1,4 +1,5 @@
 #include "audio_pipe.hpp"
+#include <switch.h>
 
 #include <cassert>
 #include <iostream>
@@ -83,7 +84,7 @@ int AudioPipe::lws_callback(struct lws *wsi,
         lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_CONNECTION_ERROR: %s, response status %d\n", in ? (char *)in : "(null)", rc); 
         if (ap) {
           ap->m_state = LWS_CLIENT_FAILED;
-          ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::CONNECT_FAIL, (char *) in);
+          ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::CONNECT_FAIL, (char *) in, NULL, len);
         }
         else {
           lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_CONNECTION_ERROR unable to find wsi %p..\n", wsi); 
@@ -98,7 +99,7 @@ int AudioPipe::lws_callback(struct lws *wsi,
           *ppAp = ap;
           ap->m_vhd = vhd;
           ap->m_state = LWS_CLIENT_CONNECTED;
-          ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::CONNECT_SUCCESS, NULL);
+          ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::CONNECT_SUCCESS, NULL, NULL, len);
         }
         else {
           lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_ESTABLISHED %s unable to find wsi %p..\n", ap->m_uuid.c_str(), wsi); 
@@ -114,12 +115,12 @@ int AudioPipe::lws_callback(struct lws *wsi,
         }
         if (ap->m_state == LWS_CLIENT_DISCONNECTING) {
           // closed by us
-          ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::CONNECTION_CLOSED_GRACEFULLY, NULL);
+          ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::CONNECTION_CLOSED_GRACEFULLY, NULL, NULL, len);
         }
         else if (ap->m_state == LWS_CLIENT_CONNECTED) {
           // closed by far end
           lwsl_notice("%s socket closed by far end\n", ap->m_uuid.c_str());
-          ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::CONNECTION_DROPPED, NULL);
+          ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::CONNECTION_DROPPED, NULL, NULL, len);
         }
         ap->m_state = LWS_CLIENT_DISCONNECTED;
 
@@ -133,14 +134,19 @@ int AudioPipe::lws_callback(struct lws *wsi,
 
     case LWS_CALLBACK_CLIENT_RECEIVE:
       {
+        
         AudioPipe* ap = *ppAp;
         if (!ap) {
           lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE %s unable to find wsi %p..\n", ap->m_uuid.c_str(), wsi); 
           return 0;
         }
-
+        
         if (lws_frame_is_binary(wsi)) {
-          lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE received binary frame, discarding.\n");
+          if (ap->is_bidirectional_audio_stream()) {
+            ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::BINARY, NULL, (char *) in, len);
+          } else {
+            lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE received binary frame, discarding.\n");
+          }
           return 0;
         }
 
@@ -458,7 +464,8 @@ bool AudioPipe::deinitialize() {
 
 // instance members
 AudioPipe::AudioPipe(const char* uuid, const char* host, unsigned int port, const char* path,
-  int sslFlags, size_t bufLen, size_t minFreespace, const char* username, const char* password, char* bugname, notifyHandler_t callback) :
+  int sslFlags, size_t bufLen, size_t minFreespace, const char* username, const char* password, char* bugname,
+  int bidirectional_audio_stream, notifyHandler_t callback) :
   m_uuid(uuid), m_host(host), m_port(port), m_path(path), m_sslFlags(sslFlags),
   m_audio_buffer_min_freespace(minFreespace), m_audio_buffer_max_len(bufLen), m_gracefulShutdown(false),
   m_audio_buffer_write_offset(LWS_PRE), m_recv_buf(nullptr), m_recv_buf_ptr(nullptr), m_bugname(bugname),
@@ -468,7 +475,7 @@ AudioPipe::AudioPipe(const char* uuid, const char* host, unsigned int port, cons
     m_username.assign(username);
     m_password.assign(password);
   }
-
+  m_bidirectional_audio_stream = bidirectional_audio_stream;
   m_audio_buffer = new uint8_t[m_audio_buffer_max_len];
 }
 AudioPipe::~AudioPipe() {

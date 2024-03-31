@@ -52,6 +52,11 @@ struct private_data {
   int audio_paused:1;
   int graceful_shutdown:1;
   char initialMetadata[8192];
+  void *circularBuffer;
+  SpeexResamplerState *bidirectional_audio_resampler;
+  int bidirectional_audio_enable;
+	int bidirectional_audio_stream;
+  int bidirectional_audio_sample_rate;
 };
 
 typedef struct private_data private_t;
