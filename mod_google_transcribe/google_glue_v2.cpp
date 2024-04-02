@@ -158,6 +158,43 @@ GStreamer<StreamingRecognizeRequest, StreamingRecognizeResponse, Speech::Stub>::
                 diarization_config->set_max_speaker_count(count);
             }
         }
+
+        if (var = switch_channel_get_variable(channel, "GOOGLE_SPEECH_START_TIMEOUT_MS")) {
+          auto duration = new google::protobuf::Duration();
+          duration->set_nanos((atoi(var) % 1000) * 1e6);
+          streaming_config->mutable_streaming_features()->mutable_voice_activity_timeout()->set_allocated_speech_start_timeout(duration);
+          switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(m_session), SWITCH_LOG_DEBUG, "setting speech_start_timeout to %d miliseconds\n", atoi(var));
+        }
+
+        if (var = switch_channel_get_variable(channel, "GOOGLE_SPEECH_END_TIMEOUT_MS")) {
+          auto duration = new google::protobuf::Duration();
+          duration->set_nanos((atoi(var) % 1000) * 1e6);
+          streaming_config->mutable_streaming_features()->mutable_voice_activity_timeout()->set_allocated_speech_end_timeout(duration);
+          switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(m_session), SWITCH_LOG_DEBUG, "setting speech_end_timeout to %d miliseconds\n", atoi(var));
+        }
+
+        if (var = switch_channel_get_variable(channel, "GOOGLE_SPEECH_TRANSCRIPTION_NORMALIZATION")) {
+           // parse JSON string
+          cJSON *json_array = cJSON_Parse(var);
+
+          int array_size = cJSON_GetArraySize(json_array);
+
+          for(int i=0; i<array_size; i++) {
+              cJSON* json_item = cJSON_GetArrayItem(json_array, i);
+
+              auto entry = config->mutable_transcript_normalization()->add_entries();
+
+              std::string search_string = cJSON_GetObjectItem(json_item, "search")->valuestring;
+              std::string replacement_string = cJSON_GetObjectItem(json_item, "replace")->valuestring;
+              bool case_sensitive = cJSON_GetObjectItem(json_item, "case_sensitive")->valueint != 0;
+
+              entry->set_search(search_string);
+              entry->set_replace(replacement_string);
+              entry->set_case_sensitive(case_sensitive);
+          }
+          // clean json
+          cJSON_Delete(json_array);
+        }
     }
 
     m_request.set_recognizer(recognizer);
