@@ -191,9 +191,18 @@ GStreamer<StreamingRecognizeRequest, StreamingRecognizeResponse, Speech::Stub>::
               entry->set_search(search_string);
               entry->set_replace(replacement_string);
               entry->set_case_sensitive(case_sensitive);
+
+              switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(m_session), SWITCH_LOG_DEBUG,
+                "TRANSCRIPTION_NORMALIZATION search %s, replace %s, set_case_sensitive %d\n", search_string.c_str(), replacement_string.c_str(), case_sensitive);
           }
           // clean json
           cJSON_Delete(json_array);
+        }
+
+        if (var = switch_channel_get_variable(channel, "GOOGLE_SPEECH_ENABLE_VOICE_ACTIVITY_EVENTS")) {
+          bool enabled = !strcmp(var, "true") ? 1 : 0;
+          streaming_config->mutable_streaming_features()->set_enable_voice_activity_events(enabled);
+          switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(m_session), SWITCH_LOG_DEBUG, "setting enable_voice_activity_events to %d \n", enabled);
         }
     }
 
