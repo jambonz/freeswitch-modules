@@ -1,14 +1,14 @@
-#include "mod_deepgram_transcribe.h"
+#include "mod_deepgram_tts.h"
+#include "deepgram_glue.h"
 
 SWITCH_MODULE_LOAD_FUNCTION(mod_deepgram_tts_load);
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_deepgram_tts_shutdown);
 SWITCH_MODULE_DEFINITION(mod_deepgram_tts, mod_deepgram_tts_load, mod_deepgram_tts_shutdown, NULL);
 
-static void clearWhisper(deepgram_t* d, int freeAll) {
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "clearWhisper\n");
+static void cleardeepgram(deepgram_t* d, int freeAll) {
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "cleardeepgram\n");
   if (d->api_key) free(d->api_key);
   if (d->model_id) free(d->model_id);
-  if (d->speed) free(d->speed);
 
   if (d->request_id) free(d->request_id);
   if (d->reported_latency) free(d->reported_latency);
@@ -22,7 +22,6 @@ static void clearWhisper(deepgram_t* d, int freeAll) {
 
   d->api_key = NULL;
   d->model_id = NULL;
-  d->speed = NULL;
   d->request_id = NULL;
 
   d->reported_latency = NULL;
@@ -106,9 +105,9 @@ static void d_speech_flush_tts(switch_speech_handle_t *sh)
 {
   deepgram_t *d = createOrRetrievePrivateData(sh);
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "d_speech_flush_tts\n");
-  whisper_speech_flush_tts(d);
+  deepgram_speech_flush_tts(d);
 
-  clearWhisper(d, 0);
+  cleardeepgram(d, 0);
 }
 
 static void d_text_param_tts(switch_speech_handle_t *sh, char *param, const char *val)
@@ -121,12 +120,6 @@ static void d_text_param_tts(switch_speech_handle_t *sh, char *param, const char
   } else if (0 == strcmp(param, "voice")) {
     if (d->voice_name) free(d->voice_name);
     d->voice_name = strdup(val);
-  } else if (0 == strcmp(param, "model_id")) {
-    if (d->model_id) free(d->model_id);
-    d->model_id = strdup(val);
-  } else if (0 == strcmp(param, "speed")) {
-    if (d->speed) free(d->speed);
-    d->speed = strdup(val);
   } else if (0 == strcmp(param, "session-uuid")) {
     if (d->session_id) free(d->session_id);
     d->session_id = strdup(val);

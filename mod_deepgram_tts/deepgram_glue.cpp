@@ -78,7 +78,7 @@ static CURL* createEasyHandle(void) {
 }
 
 static void cleanupConn(ConnInfo_t *conn) {
-  auto w = conn->deepgram;
+  auto d = conn->deepgram;
 
   if( conn->hdr_list ) {
     curl_slist_free_all(conn->hdr_list);
@@ -495,7 +495,7 @@ static bool parseHeader(const std::string& str, std::string& header, std::string
 static size_t header_callback(char *buffer, size_t size, size_t nitems, ConnInfo_t *conn) {
   size_t bytes_received = size * nitems;
   const std::string prefix = "HTTP/2 ";
-  deepgram_t* w = conn->deepgram;
+  deepgram_t* d = conn->deepgram;
   std::string header, value;
   std::string input(buffer, bytes_received);
   if (parseHeader(input, header, value)) {
@@ -685,19 +685,24 @@ extern "C" {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "deepgram_speech_feed_tts: no model_id provided\n");
       return SWITCH_STATUS_FALSE;
     }
-
+    // sample rate
+    uint32_t samples_per_second = 8000;
+    if (d->session_id) {
+      int err;
+      switch_codec_implementation_t read_impl;
+      switch_core_session_t *psession = switch_core_session_locate(d->session_id);
+      switch_core_session_get_read_impl(psession, &read_impl);
+      samples_per_second = !strcasecmp(read_impl.iananame, "g722") ? read_impl.actual_samples_per_second : read_impl.samples_per_second;
+    }
     /* format url*/
-    std::string url = "https://api.deepgram.com/v1/speak?";
+    std::string url;
+    std::ostringstream url_stream;
+    url_stream << "https://api.deepgram.com/v1/speak?model=" << d->voice_name << "&encoding=linear16&sample_rate=" << samples_per_second;
+    url = url_stream.str();
 
     /* create the JSON body */
     cJSON * jResult = cJSON_CreateObject();
-    cJSON_AddStringToObject(jResult, "model", d->model_id);
-    cJSON_AddStringToObject(jResult, "input", text);
-    cJSON_AddStringToObject(jResult, "voice", d->voice_name);
-    cJSON_AddStringToObject(jResult, "response_format", "mp3");
-    if (d->speed) {
-      cJSON_AddStringToObject(jResult, "speed", d->speed);
-    }
+    cJSON_AddStringToObject(jResult, "text", text);
     char *json = cJSON_PrintUnformatted(jResult);
 
     cJSON_Delete(jResult);
@@ -708,7 +713,7 @@ extern "C" {
 
     CURL* easy = createEasyHandle();
     d->conn = (void *) conn ;
-    conn->deepgram = w;
+    conn->deepgram = d;
     conn->easy = easy;
     conn->global = &global;
     conn->hdr_list = NULL ;
@@ -720,7 +725,7 @@ extern "C" {
     d->circularBuffer = (void *) new CircularBuffer_t(8192);
 
     std::ostringstream api_key_stream;
-    api_key_stream << "Authorization: Bearer " << d->api_key;
+    api_key_stream << "Authorization: Token " << d->api_key;
 
     curl_easy_setopt(easy, CURLOPT_URL, url.c_str());
     curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, write_cb);
