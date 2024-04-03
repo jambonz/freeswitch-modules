@@ -15,4 +15,4 @@ endif
 endif
 
 mod_audio_fork_la_LIBADD   = $(switch_builddir)/libfreeswitch.la
-mod_audio_fork_la_LDFLAGS  = -avoid-version -module -no-undefined -shared `pkg-config --libs libwebsockets` -lstdc++
+mod_audio_fork_la_LDFLAGS  = -avoid-version -module -no-undefined -shared `pkg-config --libs libwebsockets` -lstdc++ -lboost_system -lboost_thread

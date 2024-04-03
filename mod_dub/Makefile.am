@@ -15,4 +15,4 @@ endif
 endif
 
 mod_dub_la_LIBADD   = $(switch_builddir)/libfreeswitch.la
-mod_dub_la_LDFLAGS  = -avoid-version -module -no-undefined -shared `pkg-config --libs boost` -lstdc++ -lmpg123
+mod_dub_la_LDFLAGS  = -avoid-version -module -no-undefined -lstdc++ -lmpg123 -lboost_system -lboost_thread
