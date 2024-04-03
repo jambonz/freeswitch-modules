@@ -6,7 +6,7 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_azure_tts_shutdown);
 SWITCH_MODULE_DEFINITION(mod_azure_tts, mod_azure_tts_load, mod_azure_tts_shutdown, NULL);
 
 static void clearAzure(azure_t* a, int freeAll) {
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "clearAzure\n");
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "clearAzure\n");
 
   if (a->cache_filename) free(a->cache_filename);
   if (a->api_key) free(a->api_key);
@@ -46,7 +46,7 @@ static azure_t * createOrRetrievePrivateData(switch_speech_handle_t *sh) {
   	sh->private_info = a;
     memset(a, 0, sizeof(*a));
     switch_mutex_init(&a->mutex, SWITCH_MUTEX_NESTED, sh->memory_pool);
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "allocated azure_t\n");
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "allocated azure_t\n");
   }
   return a;
 }
@@ -56,7 +56,7 @@ switch_status_t a_speech_open(switch_speech_handle_t *sh, const char *voice_name
   azure_t *a = createOrRetrievePrivateData(sh);
   a->voice_name = strdup(voice_name);
   a->rate = rate;
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "a_speech_open voice: %s, rate %d, channels %d\n", voice_name, rate, channels);
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "a_speech_open voice: %s, rate %d, channels %d\n", voice_name, rate, channels);
   return azure_speech_open(a);
 }
 
@@ -64,7 +64,7 @@ static switch_status_t a_speech_close(switch_speech_handle_t *sh, switch_speech_
 {
   switch_status_t rc;
   azure_t *a = createOrRetrievePrivateData(sh);
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "a_speech_close\n");
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "a_speech_close\n");
 
   switch_mutex_destroy(a->mutex);
 
@@ -84,8 +84,6 @@ static switch_status_t a_speech_feed_tts(switch_speech_handle_t *sh, char *text,
   a->flushed = 0;
   a->samples_rate = 0;
 
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "a_speech_feed_tts\n");
-
   return azure_speech_feed_tts(a, text, flags);
 }
 
@@ -95,7 +93,6 @@ static switch_status_t a_speech_feed_tts(switch_speech_handle_t *sh, char *text,
 static switch_status_t a_speech_read_tts(switch_speech_handle_t *sh, void *data, size_t *datalen, switch_speech_flag_t *flags)
 {
   azure_t *a = createOrRetrievePrivateData(sh);
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "a_speech_read_tts\n");
   return azure_speech_read_tts(a, data, datalen, flags);
 }
 
@@ -105,7 +102,6 @@ static switch_status_t a_speech_read_tts(switch_speech_handle_t *sh, void *data,
 static void a_speech_flush_tts(switch_speech_handle_t *sh)
 {
   azure_t *a = createOrRetrievePrivateData(sh);
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "w_speech_flush_tts\n");
   azure_speech_flush_tts(a);
 
   clearAzure(a, 0);
@@ -114,7 +110,7 @@ static void a_speech_flush_tts(switch_speech_handle_t *sh)
 static void a_text_param_tts(switch_speech_handle_t *sh, char *param, const char *val)
 {
   azure_t *a = createOrRetrievePrivateData(sh);
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "a_text_param_tts: %s=%s\n", param, val);
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "a_text_param_tts: %s=%s\n", param, val);
   if (0 == strcmp(param, "api_key")) {
     if (a->api_key) free(a->api_key);
     a->api_key = strdup(val);
