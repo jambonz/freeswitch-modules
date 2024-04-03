@@ -1,6 +1,7 @@
 #include "vector_math.h"
 #include <assert.h>
 #include <string.h>
+#include <cstdlib>
 
 #define GRANULAR_VOLUME_MAX (50)
 #define SMAX 32767
