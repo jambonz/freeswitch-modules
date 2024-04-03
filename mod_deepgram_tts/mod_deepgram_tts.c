@@ -135,7 +135,7 @@ static void d_float_param_tts(switch_speech_handle_t *sh, char *param, double va
 {
 }
 
-SWITCH_MODULE_LOAD_FUNCTION(mod_whisper_tts_load)
+SWITCH_MODULE_LOAD_FUNCTION(mod_deepgram_tts_load)
 {
   switch_speech_interface_t *speech_interface;
 

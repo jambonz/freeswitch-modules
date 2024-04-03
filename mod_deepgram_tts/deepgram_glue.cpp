@@ -681,23 +681,10 @@ extern "C" {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "deepgram_speech_feed_tts: no api_key provided\n");
       return SWITCH_STATUS_FALSE;
     }
-    if (!d->model_id) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "deepgram_speech_feed_tts: no model_id provided\n");
-      return SWITCH_STATUS_FALSE;
-    }
-    // sample rate
-    uint32_t samples_per_second = 8000;
-    if (d->session_id) {
-      int err;
-      switch_codec_implementation_t read_impl;
-      switch_core_session_t *psession = switch_core_session_locate(d->session_id);
-      switch_core_session_get_read_impl(psession, &read_impl);
-      samples_per_second = !strcasecmp(read_impl.iananame, "g722") ? read_impl.actual_samples_per_second : read_impl.samples_per_second;
-    }
     /* format url*/
     std::string url;
     std::ostringstream url_stream;
-    url_stream << "https://api.deepgram.com/v1/speak?model=" << d->voice_name << "&encoding=linear16&sample_rate=" << samples_per_second;
+    url_stream << "https://api.deepgram.com/v1/speak?model=" << d->voice_name << "&encoding=linear16&sample_rate=" << d->rate;
     url = url_stream.str();
 
     /* create the JSON body */
