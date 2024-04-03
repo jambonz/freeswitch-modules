@@ -14,7 +14,7 @@ extern "C" {
 
 #if defined(USE_AVX2)
 #include <immintrin.h>
-//#pragma message("Using AVX2 SIMD.")
+#pragma message("Using AVX2 SIMD.")
 void vector_add(int16_t* a, int16_t* b, size_t len) {
     size_t i = 0;
     for (; i + 15 < len; i += 16) {
@@ -111,7 +111,7 @@ void vector_change_sln_volume_granular(int16_t* data, uint32_t samples, int32_t 
 }
 #elif defined(USE_SSE2)
 #include <emmintrin.h>
-//#pragma message("Using SSE2 SIMD.")
+#pragma message("Using SSE2 SIMD.")
 void vector_add(int16_t* a, int16_t* b, size_t len) {
   size_t i = 0;
   for (; i + 7 < len; i += 8) {
@@ -153,6 +153,7 @@ typedef union {
 } vector_data_t;
 
 #else
+#pragma message("Building without vector math support")
 void vector_add(int16_t* a, int16_t* b, size_t len) {
     for (size_t i = 0; i < len; i++) {
         a[i] += b[i];
