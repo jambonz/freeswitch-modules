@@ -158,7 +158,7 @@ extern "C" {
       CircularBuffer_t *cBuffer = (CircularBuffer_t *) a->circularBuffer;
       std::vector<uint16_t> pcm_data;
 
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Synthesizing: received data\n");
+      //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Synthesizing: received data\n");
 
       if (a->flushed) {
         return;
@@ -204,6 +204,7 @@ extern "C" {
             switch_event_t *event;
             if (switch_event_create(&event, SWITCH_EVENT_PLAYBACK_START) == SWITCH_STATUS_SUCCESS) {
               switch_channel_event_set_data(channel, event);
+              switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Playback-File-Type", "tts_stream");
               switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_time_to_first_byte_ms", time_to_first_byte_ms.c_str());
               if (a->cache_filename) {
                 switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_cache_filename", a->cache_filename);
@@ -314,7 +315,7 @@ extern "C" {
     a->flushed = 1;
     if (!download_complete) {
       if (a->file) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "closing audio cache file %s because download was interrupted\n", a->cache_filename);
+        //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "closing audio cache file %s because download was interrupted\n", a->cache_filename);
         if (fclose(a->file) != 0) {
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "error closing audio cache file\n");
         }
@@ -322,7 +323,7 @@ extern "C" {
       }
 
       if (a->cache_filename) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "removing audio cache file %s because download was interrupted\n", a->cache_filename);
+        //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "removing audio cache file %s because download was interrupted\n", a->cache_filename);
         if (unlink(a->cache_filename) != 0) {
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "cleanupConn: error removing audio cache file %s: %d:%s\n", 
             a->cache_filename, errno, strerror(errno));

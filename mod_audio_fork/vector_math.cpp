@@ -1,6 +1,7 @@
 #include "vector_math.h"
 #include <assert.h>
 #include <string.h>
+#include <cstdlib>
 
 #define GRANULAR_VOLUME_MAX (50)
 #define SMAX 32767
@@ -153,6 +154,7 @@ typedef union {
 } vector_data_t;
 
 #else
+#pragma message("Building without vector math support")
 void vector_add(int16_t* a, int16_t* b, size_t len) {
     for (size_t i = 0; i < len; i++) {
         a[i] += b[i];
