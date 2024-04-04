@@ -2,6 +2,7 @@
 #define __MOD_DEEPGRAM_TTS_H__
 
 #include <switch.h>
+#include <speex/speex_resampler.h>
 
 typedef struct deepgram_data {
   char *voice_name;
@@ -28,6 +29,7 @@ typedef struct deepgram_data {
   void *circularBuffer;
   switch_mutex_t *mutex;
   FILE *file;
+  SpeexResamplerState *resampler;
 } deepgram_t;
 
 #endif

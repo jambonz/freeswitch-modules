@@ -16,6 +16,8 @@
 #include <boost/assign/list_of.hpp>
 #include <boost/algorithm/string.hpp>
 
+#include <speex/speex_resampler.h>
+
 #define BUFFER_GROW_SIZE (80000)
 
 typedef boost::circular_buffer<uint16_t> CircularBuffer_t;
@@ -709,7 +711,8 @@ extern "C" {
     /* format url*/
     std::string url;
     std::ostringstream url_stream;
-    url_stream << "https://api.deepgram.com/v1/speak?model=" << d->voice_name << "&encoding=linear16&sample_rate=" << d->rate;
+    // always use sample_rate=8000 for support jambonz caching system.
+    url_stream << "https://api.deepgram.com/v1/speak?model=" << d->voice_name << "&encoding=linear16&sample_rate=8000";
     url = url_stream.str();
 
     /* create the JSON body */
@@ -735,6 +738,15 @@ extern "C" {
     
 
     d->circularBuffer = (void *) new CircularBuffer_t(BUFFER_GROW_SIZE);
+    // Always use deepgram at rate 8000 for helping cache audio from jambonz.
+    if (d->rate != 8000) {
+      int err;
+      d->resampler = speex_resampler_init(1, 8000, d->rate, SWITCH_RESAMPLE_QUALITY, &err);
+      if (0 != err) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error initializing resampler: %s.\n", speex_resampler_strerror(err));
+        return SWITCH_STATUS_FALSE;
+      }
+    }
 
     std::ostringstream api_key_stream;
     api_key_stream << "Authorization: Token " << d->api_key;
@@ -802,14 +814,33 @@ extern "C" {
         switch_mutex_unlock(d->mutex);
         return SWITCH_STATUS_SUCCESS;
       }
-      size_t size = std::min((*datalen/2), cBuffer->size());
+      size_t size = std::min((*datalen/(2 * d->rate / 8000)), cBuffer->size());
       pcm_data.insert(pcm_data.end(), cBuffer->begin(), cBuffer->begin() + size);
       cBuffer->erase(cBuffer->begin(), cBuffer->begin() + size);
       switch_mutex_unlock(d->mutex);
     }
 
-    memcpy(data, pcm_data.data(), pcm_data.size() * sizeof(uint16_t));
-    *datalen = pcm_data.size() * sizeof(uint16_t);
+    size_t data_size = pcm_data.size();
+
+    if (d->resampler) {
+      std::vector<int16_t> in(pcm_data.begin(), pcm_data.end());
+
+      std::vector<int16_t> out((*datalen));
+      spx_uint32_t in_len = data_size;
+      spx_uint32_t out_len = out.size();
+      speex_resampler_process_interleaved_int(d->resampler, in.data(), &in_len, out.data(), &out_len);
+
+      if (out_len > out.size()) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CRIT, "Resampler output exceeded maximum buffer size!\n");
+        return SWITCH_STATUS_FALSE;
+      }
+
+      memcpy(data, out.data(), out_len * sizeof(int16_t));
+      *datalen = out_len * sizeof(int16_t);
+    } else {
+      memcpy(data, pcm_data.data(), pcm_data.size() * sizeof(uint16_t));
+      *datalen = pcm_data.size() * sizeof(uint16_t);
+    }
 
     return SWITCH_STATUS_SUCCESS;
   }
@@ -822,6 +853,12 @@ extern "C" {
     CircularBuffer_t *cBuffer = (CircularBuffer_t *) d->circularBuffer;
     delete cBuffer;
     d->circularBuffer = nullptr ;
+
+    // destroy resampler
+    if (d->resampler) {
+      speex_resampler_destroy(d->resampler);
+      d->resampler = NULL;
+    }
 
     if (conn) {
       conn->flushed = true;
