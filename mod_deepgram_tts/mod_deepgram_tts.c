@@ -92,7 +92,6 @@ static switch_status_t d_speech_feed_tts(switch_speech_handle_t *sh, char *text,
 static switch_status_t d_speech_read_tts(switch_speech_handle_t *sh, void *data, size_t *datalen, switch_speech_flag_t *flags)
 {
   deepgram_t *d = createOrRetrievePrivateData(sh);
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "d_speech_read_tts\n");
   return deepgram_speech_read_tts(d, data, datalen, flags);
 }
 

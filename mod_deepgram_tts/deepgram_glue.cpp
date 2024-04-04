@@ -421,8 +421,6 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
   int16_t* inputData = reinterpret_cast<int16_t*>(data);
   {
     switch_mutex_lock(d->mutex);
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "write_cb: received data, response %ld\n", 
-      d->response_code);
 
     if (d->response_code > 0 && d->response_code != 200) {
       std::string body((char *) ptr, bytes_received);
@@ -433,7 +431,7 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
     }
 
     /* cache file will stay in the mp3 format for size (smaller) and simplicity */
-    if (conn->file) fwrite(data, sizeof(uint8_t), bytes_received, conn->file);
+    if (conn->file) fwrite(inputData, sizeof(int16_t), numSamples, conn->file);
 
     // Resize the buffer if necessary
     if (cBuffer->capacity() - cBuffer->size() < numSamples) {
