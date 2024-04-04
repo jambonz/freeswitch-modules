@@ -527,8 +527,7 @@ static size_t header_callback(char *buffer, size_t size, size_t nitems, ConnInfo
   std::string input(buffer, bytes_received);
   if (parseHeader(input, header, value)) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "recv header: %s with value %s\n", header.c_str(), value.c_str());
-    if (0 == header.compare("openai-processing-ms")) d->reported_latency = strdup(value.c_str());
-    else if (0 == header.compare("x-request-id")) d->request_id = strdup(value.c_str());
+    if (0 == header.compare("dg-request-id")) d->request_id = strdup(value.c_str());
   }
   else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "recv header: %s\n", input.c_str());
