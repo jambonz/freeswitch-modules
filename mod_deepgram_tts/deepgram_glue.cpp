@@ -16,7 +16,7 @@
 #include <boost/assign/list_of.hpp>
 #include <boost/algorithm/string.hpp>
 
-#define BUFFER_GROW_SIZE (8192)
+#define BUFFER_GROW_SIZE (80000)
 
 typedef boost::circular_buffer<uint16_t> CircularBuffer_t;
 /* Global information, common to all connections */
@@ -734,7 +734,7 @@ extern "C" {
     conn->flushed = false;
     
 
-    d->circularBuffer = (void *) new CircularBuffer_t(8192);
+    d->circularBuffer = (void *) new CircularBuffer_t(BUFFER_GROW_SIZE);
 
     std::ostringstream api_key_stream;
     api_key_stream << "Authorization: Token " << d->api_key;
