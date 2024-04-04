@@ -8,7 +8,6 @@ SWITCH_MODULE_DEFINITION(mod_deepgram_tts, mod_deepgram_tts_load, mod_deepgram_t
 static void cleardeepgram(deepgram_t* d, int freeAll) {
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "cleardeepgram\n");
   if (d->api_key) free(d->api_key);
-  if (d->model_id) free(d->model_id);
 
   if (d->request_id) free(d->request_id);
   if (d->reported_latency) free(d->reported_latency);
@@ -21,7 +20,6 @@ static void cleardeepgram(deepgram_t* d, int freeAll) {
   
 
   d->api_key = NULL;
-  d->model_id = NULL;
   d->request_id = NULL;
 
   d->reported_latency = NULL;

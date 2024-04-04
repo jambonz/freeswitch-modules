@@ -6,7 +6,6 @@
 typedef struct deepgram_data {
   char *voice_name;
   char *api_key;
-  char *model_id;
 
   /* result data */
   long response_code;

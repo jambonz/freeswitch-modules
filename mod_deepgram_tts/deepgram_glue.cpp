@@ -39,6 +39,9 @@ typedef struct
   FILE* file;
   std::chrono::time_point<std::chrono::high_resolution_clock> startTime;
   bool flushed;
+
+  bool has_last_byte;
+  uint8_t last_byte;
 } ConnInfo_t;
 
 
@@ -376,16 +379,46 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
   bool fireEvent = false;
   uint8_t *data = (uint8_t *) ptr;
   size_t bytes_received = size * nmemb;
-  size_t numSamples = bytes_received / sizeof(int16_t);
-  int16_t* inputData = reinterpret_cast<int16_t*>(ptr);
+  size_t total_bytes_to_process;
   auto d = conn->deepgram;
   CircularBuffer_t *cBuffer = (CircularBuffer_t *) d->circularBuffer;
-  std::vector<uint16_t> pcm_data;
   
   if (conn->flushed) {
     /* this will abort the transfer */
     return 0;
   }
+  // Buffer to hold combined data if there is unprocessed byte from the last call.
+  std::unique_ptr<uint8_t[]> combinedData;
+
+  if (conn->has_last_byte) {
+    conn->has_last_byte = false;  // We'll handle the last_byte now, so toggle the flag off
+
+    // Allocate memory for the new data array
+    combinedData.reset(new uint8_t[bytes_received + 1]);
+
+    // Prepend the last byte from previous call
+    combinedData[0] = conn->last_byte;
+
+    // Copy the new data following the prepended byte
+    memcpy(combinedData.get() + 1, data, bytes_received);
+
+    // Point our data pointer to the new array
+    data = combinedData.get();
+
+    total_bytes_to_process = bytes_received + 1;
+  } else {
+    total_bytes_to_process = bytes_received;
+  }
+
+  // If we now have an odd total, save the last byte for next time
+  if ((total_bytes_to_process % sizeof(int16_t)) != 0) {
+    conn->last_byte = data[total_bytes_to_process - 1];
+    conn->has_last_byte = true;
+    total_bytes_to_process--;
+  }
+
+  size_t numSamples = total_bytes_to_process / sizeof(int16_t);
+  int16_t* inputData = reinterpret_cast<int16_t*>(data);
   {
     switch_mutex_lock(d->mutex);
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "write_cb: received data, response %ld\n", 
@@ -402,19 +435,16 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
     /* cache file will stay in the mp3 format for size (smaller) and simplicity */
     if (conn->file) fwrite(data, sizeof(uint8_t), bytes_received, conn->file);
 
-    pcm_data.assign(inputData, inputData + numSamples);
-    size_t bytesResampled = pcm_data.size() * sizeof(uint16_t);
-
     // Resize the buffer if necessary
-    if (cBuffer->capacity() - cBuffer->size() < (bytesResampled / sizeof(uint16_t))) {
+    if (cBuffer->capacity() - cBuffer->size() < numSamples) {
       //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "write_cb growing buffer\n"); 
 
       //TODO: if buffer exceeds some max size, return CURL_WRITEFUNC_ERROR to abort the transfer
-      cBuffer->set_capacity(cBuffer->size() + std::max((bytesResampled / sizeof(uint16_t)), (size_t)BUFFER_GROW_SIZE));
+      cBuffer->set_capacity(cBuffer->size() + std::max(numSamples, (size_t)BUFFER_GROW_SIZE));
     }
     
     /* Push the data into the buffer */
-    cBuffer->insert(cBuffer->end(), pcm_data.data(), pcm_data.data() + pcm_data.size());
+    cBuffer->insert(cBuffer->end(), inputData, inputData + numSamples);
 
     if (0 == d->reads++) {
       fireEvent = true;
@@ -454,9 +484,6 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
           if (d->voice_name) {
             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_deepgram_voice_name", d->voice_name);
           }
-          if (d->model_id) {
-            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_deepgram_model_id", d->model_id);
-          }
           if (d->cache_filename) {
             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_cache_filename", d->cache_filename);
           }
@@ -477,7 +504,7 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "write_cb: session %s not found\n", d->session_id);
     }
   }
-  return bytes_received;
+  return size*nmemb;
 }
 
 static bool parseHeader(const std::string& str, std::string& header, std::string& value) {
@@ -658,7 +685,7 @@ extern "C" {
       switch_uuid_get(&uuid);
       switch_uuid_format(uuid_str, &uuid);
 
-      switch_snprintf(outfile, sizeof(outfile), "%s%s%s.mp3", fullDirPath.c_str(), SWITCH_PATH_SEPARATOR, uuid_str);
+      switch_snprintf(outfile, sizeof(outfile), "%s%s%s.r8", fullDirPath.c_str(), SWITCH_PATH_SEPARATOR, uuid_str);
       d->cache_filename = strdup(outfile);
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "writing audio cache file to %s\n", d->cache_filename);
 
