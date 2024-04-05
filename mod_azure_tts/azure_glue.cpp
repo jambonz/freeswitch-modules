@@ -164,7 +164,6 @@ extern "C" {
         return;
       }
       {
-        switch_mutex_lock(a->mutex);
         auto audioData = e.Result->GetAudioData();
         for (size_t i = 0; i < audioData->size(); i += sizeof(int16_t)) {
             int16_t value = static_cast<int16_t>((*audioData)[i]) | (static_cast<int16_t>((*audioData)[i + 1]) << 8);
@@ -174,6 +173,8 @@ extern "C" {
         /* and write to the file */
         size_t bytesResampled = pcm_data.size() * sizeof(uint16_t);
         if (a->file) fwrite(pcm_data.data(), sizeof(uint16_t), pcm_data.size(), a->file);
+
+        switch_mutex_lock(a->mutex);
 
         // Resize the buffer if necessary
         if (cBuffer->capacity() - cBuffer->size() < (bytesResampled / sizeof(uint16_t))) {
@@ -248,33 +249,30 @@ extern "C" {
     CircularBuffer_t *cBuffer = (CircularBuffer_t *) a->circularBuffer;
     std::vector<uint16_t> pcm_data;
 
-    {
-      switch_mutex_lock(a->mutex);
-      if (a->response_code > 0 && a->response_code != 200) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "azure_speech_read_tts, returning failure\n") ;
-        return SWITCH_STATUS_FALSE;
-      }
-      if (a->flushed) {
+    if (a->response_code > 0 && a->response_code != 200) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "azure_speech_read_tts, returning failure\n") ;
+      return SWITCH_STATUS_FALSE;
+    }
+    if (a->flushed) {
+      return SWITCH_STATUS_BREAK;
+    }
+    switch_mutex_lock(a->mutex);
+    if (cBuffer->empty()) {
+      switch_mutex_unlock(a->mutex);
+      if (a->draining) {
         return SWITCH_STATUS_BREAK;
       }
-      if (cBuffer->empty()) {
-        if (a->draining) {
-          switch_mutex_unlock(a->mutex);
-          return SWITCH_STATUS_BREAK;
-        }
-        /* no audio available yet so send silence */
-        memset(data, 255, *datalen);
-        switch_mutex_unlock(a->mutex);
-        return SWITCH_STATUS_SUCCESS;
-      }
-      // azure returned 8000hz 16 bit data, we have to take enough data based on call sample rate.
-      size_t size = a->samples_rate ?
-        std::min((*datalen/(2 * a->samples_rate / 8000)), cBuffer->size()) :
-        std::min((*datalen/2), cBuffer->size());
-      pcm_data.insert(pcm_data.end(), cBuffer->begin(), cBuffer->begin() + size);
-      cBuffer->erase(cBuffer->begin(), cBuffer->begin() + size);
-      switch_mutex_unlock(a->mutex);
+      /* no audio available yet so send silence */
+      memset(data, 255, *datalen);
+      return SWITCH_STATUS_SUCCESS;
     }
+    // azure returned 8000hz 16 bit data, we have to take enough data based on call sample rate.
+    size_t size = a->samples_rate ?
+      std::min((*datalen/(2 * a->samples_rate / 8000)), cBuffer->size()) :
+      std::min((*datalen/2), cBuffer->size());
+    pcm_data.insert(pcm_data.end(), cBuffer->begin(), cBuffer->begin() + size);
+    cBuffer->erase(cBuffer->begin(), cBuffer->begin() + size);
+    switch_mutex_unlock(a->mutex);
 
     size_t data_size = pcm_data.size();
 
