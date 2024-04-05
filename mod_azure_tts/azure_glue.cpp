@@ -235,13 +235,13 @@ extern "C" {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error synthsize tex %d with error string: %s.\n", static_cast<int>(cancellation->ErrorCode), cancellation->ErrorDetails.c_str());
       }
     };
-    // switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts before sending synthesize request\n");
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts before sending synthesize request\n");
     if (std::strncmp(text, "<speak", 6) == 0) {
-      speechSynthesizer->SpeakSsmlAsync(text);
+       std::shared_ptr< SpeechSynthesisResult > result = speechSynthesizer->SpeakSsmlAsync(text).get();
     } else {
-      speechSynthesizer->SpeakTextAsync(text);
+      std::shared_ptr< SpeechSynthesisResult > result = speechSynthesizer->SpeakTextAsync(text).get();
     }
-    // switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts sent synthesize request\n");
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts sent synthesize request\n");
     return SWITCH_STATUS_SUCCESS;
   }
 
@@ -257,6 +257,7 @@ extern "C" {
       return SWITCH_STATUS_BREAK;
     }
     switch_mutex_lock(a->mutex);
+    size_t bufSize = cBuffer->size();
     if (cBuffer->empty()) {
       switch_mutex_unlock(a->mutex);
       if (a->draining) {
@@ -268,8 +269,8 @@ extern "C" {
     }
     // azure returned 8000hz 16 bit data, we have to take enough data based on call sample rate.
     size_t size = a->samples_rate ?
-      std::min((*datalen/(2 * a->samples_rate / 8000)), cBuffer->size()) :
-      std::min((*datalen/2), cBuffer->size());
+      std::min((*datalen/(2 * a->samples_rate / 8000)), bufSize) :
+      std::min((*datalen/2), bufSize);
     pcm_data.insert(pcm_data.end(), cBuffer->begin(), cBuffer->begin() + size);
     cBuffer->erase(cBuffer->begin(), cBuffer->begin() + size);
     switch_mutex_unlock(a->mutex);
