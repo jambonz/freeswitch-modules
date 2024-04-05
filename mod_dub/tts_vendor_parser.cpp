@@ -35,7 +35,15 @@ switch_status_t azure_parse_text(const std::map<std::string, std::string>& param
       http_proxy_port = pair.second;
     }
   }
-  bool isSSML = strncmp(text.c_str(), "<speak", 6) == 0;
+
+  if (language.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "elevenlabs_parse_text: no language provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
+  if (voice_name.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "elevenlabs_parse_text: no voice_name provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
 
   if (region.empty()) {
     region = "westus";
@@ -49,15 +57,25 @@ switch_status_t azure_parse_text(const std::map<std::string, std::string>& param
   }
   url = url_stream.str();
 
-  // Body
-  body = text;
+  // Body  
+  if (strncmp(text.c_str(), "<speak", 6) == 0) {
+    body = text;
+  } else {
+    std::ostringstream body_stream;
+    body_stream << "<speak version=\"1.0\" xmlns=\"http://www.w3.org/2001/10/synthesis\" xmlns:mstts=\"https://www.w3.org/2001/mstts\" xml:lang=\"" << language << "\">";
+    body_stream << "<voice name=\"" << voice_name << "\">";
+    body_stream << text;
+    body_stream << "</voice>";
+    body_stream << "</speak>";
+    body = body_stream.str();
+  }
 
   // Create headers
   if (!api_key.empty()) {
     headers.push_back("Ocp-Apim-Subscription-Key: " + api_key);
   }
-  headers.push_back("Content-Type: " + isSSML ? "application/ssml+xml" : "text/plain");
-  headers.push_back("X-Microsoft-OutputFormat: audio-8khz-128kbitrate-mono-mp3");
+  headers.push_back("Content-Type: application/ssml+xml");
+  headers.push_back("X-Microsoft-OutputFormat: audio-16khz-32kbitrate-mono-mp3");
 
   // Proxy
   std::ostringstream proxy_stream;
