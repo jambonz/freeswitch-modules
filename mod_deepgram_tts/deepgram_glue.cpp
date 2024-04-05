@@ -421,6 +421,11 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
 
   size_t numSamples = total_bytes_to_process / sizeof(int16_t);
   int16_t* inputData = reinterpret_cast<int16_t*>(data);
+  if (0 == d->reads++) {
+    fireEvent = true;
+    // Deepgram return PCM linear16 WAV file which contains 44 bytes headers, remove that.
+    inputData += 22;
+  }
   {
     switch_mutex_lock(d->mutex);
 
@@ -446,9 +451,6 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
     /* Push the data into the buffer */
     cBuffer->insert(cBuffer->end(), inputData, inputData + numSamples);
 
-    if (0 == d->reads++) {
-      fireEvent = true;
-    }
     switch_mutex_unlock(d->mutex);
   }
   if (fireEvent && d->session_id) {
