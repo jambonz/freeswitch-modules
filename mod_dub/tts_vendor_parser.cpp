@@ -4,6 +4,58 @@
 #include <switch_json.h>
 #include <map>
 
+switch_status_t whisper_parse_text(const std::map<std::string, std::string>& params, const std::string& text, 
+  std::string& url, std::string& body, std::vector<std::string>& headers) {
+  std::string api_key;
+  std::string voice_name;
+  std::string model_id;
+  std::string speed;
+
+  for (const auto& pair : params) {
+    if (pair.first == "api_key") {
+      api_key = pair.second;
+    } else if (pair.first == "voice") {
+      voice_name = pair.second;
+    } else if (pair.first == "model_id") {
+      model_id = pair.second;
+    } else if (pair.first == "speed") {
+      speed = pair.second;
+    }
+  }
+
+  if (api_key.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "whisper_parse_text: no api_key provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
+  if (model_id.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "whisper_parse_text: no model_id provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
+
+  url = "https://api.openai.com/v1/audio/speech";
+
+  /* create the JSON body */
+  cJSON * jResult = cJSON_CreateObject();
+  cJSON_AddStringToObject(jResult, "model", model_id.c_str());
+  cJSON_AddStringToObject(jResult, "input", text.c_str());
+  cJSON_AddStringToObject(jResult, "voice", voice_name.c_str());
+  cJSON_AddStringToObject(jResult, "response_format", "mp3");
+  if (!speed.empty()) {
+    cJSON_AddStringToObject(jResult, "speed", speed.c_str());
+  }
+  char* _body = cJSON_PrintUnformatted(jResult);
+  body = _body;
+
+  cJSON_Delete(jResult);
+  free(_body);
+
+  // Create headers
+  headers.push_back("Authorization: Bearer " + api_key);
+  headers.push_back("Content-Type: application/json");
+
+  return SWITCH_STATUS_SUCCESS;
+}
+
 switch_status_t azure_parse_text(const std::map<std::string, std::string>& params, const std::string& text, 
   std::string& url, std::string& body, std::vector<std::string>& headers, std::string& proxy) {
 
@@ -249,6 +301,8 @@ switch_status_t tts_vendor_parse_text(const std::string& say, std::string& url, 
     return deepgram_parse_text(params, text, url, body, headers);
   } else if (params["vendor"] == "microsoft") {
     return azure_parse_text(params, text, url, body, headers, proxy);
+  } else if (params["vendor"] == "whisper") {
+    return whisper_parse_text(params, text, url, body, headers);
   } else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "tts_vendor_parse_text: There is no available parser for vendor %s\n", params["vendor"]);
     return SWITCH_STATUS_FALSE;
