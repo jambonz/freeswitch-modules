@@ -114,11 +114,11 @@ void Track::queueHttpPostAudio(const std::string& url, int gain, bool loop) {
   }
 }
 
-void Track::queueHttpPostAudio(const std::string& url, const std::string& body, std::vector<std::string>& headers, int gain, bool loop) {
+void Track::queueHttpPostAudio(const std::string& url, const std::string& body, std::vector<std::string>& headers, const std::string& proxy, int gain, bool loop) {
   bool startIt = false;
   if (_stopping) return;
   auto ap = std::make_shared<AudioProducerHttp>(_mutex, _buffer, _sampleRate);
-    ap->queueHttpPostAudio(url, body, headers, gain, loop);
+    ap->queueHttpPostAudio(url, body, headers, proxy, gain, loop);
   {
     std::lock_guard<std::mutex> lock(_mutex);
     _apQueue.push(ap);

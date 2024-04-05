@@ -4,6 +4,186 @@
 #include <switch_json.h>
 #include <map>
 
+switch_status_t whisper_parse_text(const std::map<std::string, std::string>& params, const std::string& text, 
+  std::string& url, std::string& body, std::vector<std::string>& headers) {
+  std::string api_key;
+  std::string voice_name;
+  std::string model_id;
+  std::string speed;
+
+  for (const auto& pair : params) {
+    if (pair.first == "api_key") {
+      api_key = pair.second;
+    } else if (pair.first == "voice") {
+      voice_name = pair.second;
+    } else if (pair.first == "model_id") {
+      model_id = pair.second;
+    } else if (pair.first == "speed") {
+      speed = pair.second;
+    }
+  }
+
+  if (api_key.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "whisper_parse_text: no api_key provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
+  if (model_id.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "whisper_parse_text: no model_id provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
+
+  url = "https://api.openai.com/v1/audio/speech";
+
+  /* create the JSON body */
+  cJSON * jResult = cJSON_CreateObject();
+  cJSON_AddStringToObject(jResult, "model", model_id.c_str());
+  cJSON_AddStringToObject(jResult, "input", text.c_str());
+  cJSON_AddStringToObject(jResult, "voice", voice_name.c_str());
+  cJSON_AddStringToObject(jResult, "response_format", "mp3");
+  if (!speed.empty()) {
+    cJSON_AddStringToObject(jResult, "speed", speed.c_str());
+  }
+  char* _body = cJSON_PrintUnformatted(jResult);
+  body = _body;
+
+  cJSON_Delete(jResult);
+  free(_body);
+
+  // Create headers
+  headers.push_back("Authorization: Bearer " + api_key);
+  headers.push_back("Content-Type: application/json");
+
+  return SWITCH_STATUS_SUCCESS;
+}
+
+switch_status_t azure_parse_text(const std::map<std::string, std::string>& params, const std::string& text, 
+  std::string& url, std::string& body, std::vector<std::string>& headers, std::string& proxy) {
+
+  std::string api_key;
+  std::string voice_name;
+  std::string language;
+  std::string region;
+  std::string endpoint;
+  std::string endpointId;
+  std::string http_proxy_ip;
+  std::string http_proxy_port;
+
+  for (const auto& pair : params) {
+    if (pair.first == "api_key") {
+      api_key = pair.second;
+    } else if (pair.first == "voice") {
+      voice_name = pair.second;
+    } else if (pair.first == "language") {
+      language = pair.second;
+    } else if (pair.first == "region") {
+      region = pair.second;
+    } else if (pair.first == "endpoint") {
+      endpoint = pair.second;
+    } else if (pair.first == "endpointId") {
+      endpointId = pair.second;
+    } else if (pair.first == "http_proxy_ip") {
+      http_proxy_ip = pair.second;
+    } else if (pair.first == "http_proxy_port") {
+      http_proxy_port = pair.second;
+    }
+  }
+
+  if (language.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "azure_parse_text: no language provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
+  if (voice_name.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "azure_parse_text: no voice_name provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
+
+  if (region.empty()) {
+    region = "westus";
+  }
+    /* format url*/
+  url = !endpoint.empty() ? endpoint : "https://" + region + ".tts.speech.microsoft.com/cognitiveservices/v1";
+
+  // Body  
+  if (strncmp(text.c_str(), "<speak", 6) == 0) {
+    body = text;
+  } else {
+    std::ostringstream body_stream;
+    body_stream << "<speak version=\"1.0\" xmlns=\"http://www.w3.org/2001/10/synthesis\" xmlns:mstts=\"https://www.w3.org/2001/mstts\" xml:lang=\"" << language << "\">";
+    body_stream << "<voice name=\"" << voice_name << "\">";
+    body_stream << text;
+    body_stream << "</voice>";
+    body_stream << "</speak>";
+    body = body_stream.str();
+  }
+
+  // Create headers
+  if (!api_key.empty()) {
+    headers.push_back("Ocp-Apim-Subscription-Key: " + api_key);
+  }
+  if (!endpointId.empty()) {
+    headers.push_back("X-Microsoft-EndpointId: " + endpointId);
+  }
+  headers.push_back("Content-Type: application/ssml+xml");
+  headers.push_back("X-Microsoft-OutputFormat: audio-16khz-32kbitrate-mono-mp3");
+
+  // Proxy
+  std::ostringstream proxy_stream;
+  if (!http_proxy_ip.empty()) {
+    proxy_stream << "http://" << http_proxy_ip;
+    if (!http_proxy_port.empty()) {
+      proxy_stream << ":" << http_proxy_port;
+    }
+  }
+  proxy = proxy_stream.str();
+
+  return SWITCH_STATUS_SUCCESS;
+}
+
+switch_status_t deepgram_parse_text(const std::map<std::string, std::string>& params, const std::string& text, 
+  std::string& url, std::string& body, std::vector<std::string>& headers) {
+
+  std::string api_key;
+  std::string voice_name;
+
+  for (const auto& pair : params) {
+    if (pair.first == "api_key") {
+      api_key = pair.second;
+    } else if (pair.first == "voice") {
+      voice_name = pair.second;
+    }
+  }
+
+  if (api_key.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "deepgram_parse_text: no api_key provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
+  if (voice_name.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "deepgram_parse_text: no voice_name provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
+
+  /* format url*/
+  std::ostringstream url_stream;
+  url_stream << "https://api.deepgram.com/v1/speak?model=" << voice_name << "&encoding=mp3";
+  url = url_stream.str();
+
+  /* create the JSON body */
+  cJSON * jResult = cJSON_CreateObject();
+  cJSON_AddStringToObject(jResult, "text", text.c_str());
+
+  char* _body = cJSON_PrintUnformatted(jResult);
+  body = _body;
+
+  cJSON_Delete(jResult);
+  free(_body);
+
+  // Create headers
+  headers.push_back("Authorization: Token " + api_key);
+  headers.push_back("Content-Type: application/json");
+
+  return SWITCH_STATUS_SUCCESS;
+}
+
 switch_status_t elevenlabs_parse_text(const std::map<std::string, std::string>& params, const std::string& text, 
   std::string& url, std::string& body, std::vector<std::string>& headers) {
 
@@ -87,7 +267,7 @@ switch_status_t elevenlabs_parse_text(const std::map<std::string, std::string>& 
   return SWITCH_STATUS_SUCCESS;
 }
 
-switch_status_t tts_vendor_parse_text(const std::string& say, std::string& url, std::string& body, std::vector<std::string>& headers) {
+switch_status_t tts_vendor_parse_text(const std::string& say, std::string& url, std::string& body, std::vector<std::string>& headers, std::string& proxy) {
   size_t start = say.find("{") + 1;
   size_t end = say.find("}");
 
@@ -111,8 +291,14 @@ switch_status_t tts_vendor_parse_text(const std::string& say, std::string& url, 
 
   if (params["vendor"] == "elevenlabs") {
     return elevenlabs_parse_text(params, text, url, body, headers);
+  } else if (params["vendor"] == "deepgram") {
+    return deepgram_parse_text(params, text, url, body, headers);
+  } else if (params["vendor"] == "microsoft") {
+    return azure_parse_text(params, text, url, body, headers, proxy);
+  } else if (params["vendor"] == "whisper") {
+    return whisper_parse_text(params, text, url, body, headers);
   } else {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "tts_vendor_parse_text: There is no available parser for text\n");
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "tts_vendor_parse_text: There is no available parser for vendor %s\n", params["vendor"]);
     return SWITCH_STATUS_FALSE;
   }
 }
