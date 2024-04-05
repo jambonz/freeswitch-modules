@@ -45,7 +45,7 @@ switch_status_t azure_parse_text(const std::map<std::string, std::string>& param
   if (!endpoint.empty()) {
     url_stream << endpoint;
   } else {
-    url_stream << region << ".tts.speech.microsoft.com/cognitiveservices/v1";
+    url_stream << "https://" << region << ".tts.speech.microsoft.com/cognitiveservices/v1";
   }
   url = url_stream.str();
 
