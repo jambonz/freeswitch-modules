@@ -74,6 +74,9 @@ switch_status_t azure_parse_text(const std::map<std::string, std::string>& param
   if (!api_key.empty()) {
     headers.push_back("Ocp-Apim-Subscription-Key: " + api_key);
   }
+  if (!endpointId.empty()) {
+    headers.push_back("X-Microsoft-EndpointId: " + endpointId);
+  }
   headers.push_back("Content-Type: application/ssml+xml");
   headers.push_back("X-Microsoft-OutputFormat: audio-16khz-32kbitrate-mono-mp3");
 
