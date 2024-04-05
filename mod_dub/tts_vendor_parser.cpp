@@ -97,7 +97,7 @@ switch_status_t deepgram_parse_text(const std::map<std::string, std::string>& pa
 
   /* format url*/
   std::ostringstream url_stream;
-  url_stream << "https://api.deepgram.com/v1/speak?model=" << voice_name << "&encoding=mp3&sample_rate=8000";
+  url_stream << "https://api.deepgram.com/v1/speak?model=" << voice_name << "&encoding=mp3";
   url = url_stream.str();
 
   /* create the JSON body */
