@@ -101,13 +101,7 @@ switch_status_t azure_parse_text(const std::map<std::string, std::string>& param
     region = "westus";
   }
     /* format url*/
-  std::ostringstream url_stream;
-  if (!endpoint.empty()) {
-    url_stream << endpoint;
-  } else {
-    url_stream << "https://" << region << ".tts.speech.microsoft.com/cognitiveservices/v1";
-  }
-  url = url_stream.str();
+  url = !endpoint.empty() ? endpoint : "https://" + region + ".tts.speech.microsoft.com/cognitiveservices/v1";
 
   // Body  
   if (strncmp(text.c_str(), "<speak", 6) == 0) {
