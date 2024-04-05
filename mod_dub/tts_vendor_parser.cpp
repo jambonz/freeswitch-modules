@@ -4,6 +4,51 @@
 #include <switch_json.h>
 #include <map>
 
+switch_status_t deepgram_parse_text(const std::map<std::string, std::string>& params, const std::string& text, 
+  std::string& url, std::string& body, std::vector<std::string>& headers) {
+
+  std::string api_key;
+  std::string voice_name;
+
+  for (const auto& pair : params) {
+    if (pair.first == "api_key") {
+      api_key = pair.second;
+    } else if (pair.first == "voice") {
+      voice_name = pair.second;
+    }
+  }
+
+  if (api_key.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "elevenlabs_parse_text: no api_key provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
+  if (voice_name.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "elevenlabs_parse_text: no voice_name provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
+
+  /* format url*/
+  std::ostringstream url_stream;
+  url_stream << "https://api.deepgram.com/v1/speak?model=" << voice_name << "&encoding=mp3&sample_rate=8000";
+  url = url_stream.str();
+
+  /* create the JSON body */
+  cJSON * jResult = cJSON_CreateObject();
+  cJSON_AddStringToObject(jResult, "text", text.c_str());
+
+  char* _body = cJSON_PrintUnformatted(jResult);
+  body = _body;
+
+  cJSON_Delete(jResult);
+  free(_body);
+
+  // Create headers
+  headers.push_back("Authorization: Token " + api_key);
+  headers.push_back("Content-Type: application/json");
+
+  return SWITCH_STATUS_SUCCESS;
+}
+
 switch_status_t elevenlabs_parse_text(const std::map<std::string, std::string>& params, const std::string& text, 
   std::string& url, std::string& body, std::vector<std::string>& headers) {
 
@@ -111,6 +156,8 @@ switch_status_t tts_vendor_parse_text(const std::string& say, std::string& url, 
 
   if (params["vendor"] == "elevenlabs") {
     return elevenlabs_parse_text(params, text, url, body, headers);
+  } else if (params["vendor"] == "deepgram") {
+    return deepgram_parse_text(params, text, url, body, headers);
   } else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "tts_vendor_parse_text: There is no available parser for text\n");
     return SWITCH_STATUS_FALSE;
