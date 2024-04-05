@@ -37,11 +37,11 @@ switch_status_t azure_parse_text(const std::map<std::string, std::string>& param
   }
 
   if (language.empty()) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "elevenlabs_parse_text: no language provided\n");
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "azure_parse_text: no language provided\n");
     return SWITCH_STATUS_FALSE;
   }
   if (voice_name.empty()) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "elevenlabs_parse_text: no voice_name provided\n");
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "azure_parse_text: no voice_name provided\n");
     return SWITCH_STATUS_FALSE;
   }
 
@@ -105,11 +105,11 @@ switch_status_t deepgram_parse_text(const std::map<std::string, std::string>& pa
   }
 
   if (api_key.empty()) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "elevenlabs_parse_text: no api_key provided\n");
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "deepgram_parse_text: no api_key provided\n");
     return SWITCH_STATUS_FALSE;
   }
   if (voice_name.empty()) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "elevenlabs_parse_text: no voice_name provided\n");
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "deepgram_parse_text: no voice_name provided\n");
     return SWITCH_STATUS_FALSE;
   }
 
