@@ -4,6 +4,74 @@
 #include <switch_json.h>
 #include <map>
 
+switch_status_t azure_parse_text(const std::map<std::string, std::string>& params, const std::string& text, 
+  std::string& url, std::string& body, std::vector<std::string>& headers, std::string& proxy) {
+
+  std::string api_key;
+  std::string voice_name;
+  std::string language;
+  std::string region;
+  std::string endpoint;
+  std::string endpointId;
+  std::string http_proxy_ip;
+  std::string http_proxy_port;
+
+  for (const auto& pair : params) {
+    if (pair.first == "api_key") {
+      api_key = pair.second;
+    } else if (pair.first == "voice") {
+      voice_name = pair.second;
+    } else if (pair.first == "language") {
+      language = pair.second;
+    } else if (pair.first == "region") {
+      region = pair.second;
+    } else if (pair.first == "endpoint") {
+      endpoint = pair.second;
+    } else if (pair.first == "endpointId") {
+      endpointId = pair.second;
+    } else if (pair.first == "http_proxy_ip") {
+      http_proxy_ip = pair.second;
+    } else if (pair.first == "http_proxy_port") {
+      http_proxy_port = pair.second;
+    }
+  }
+  bool isSSML = strncmp(text.c_str(), "<speak", 6) == 0;
+
+  if (region.empty()) {
+    region = "westus";
+  }
+    /* format url*/
+  std::ostringstream url_stream;
+  if (!endpoint.empty()) {
+    url_stream << endpoint;
+  } else {
+    url_stream << region << ".tts.speech.microsoft.com/cognitiveservices/v1";
+  }
+  url = url_stream.str();
+
+  // Body
+  body = text;
+
+  // Create headers
+  if (!api_key.empty()) {
+    headers.push_back("Ocp-Apim-Subscription-Key: " + api_key);
+  }
+  headers.push_back("Content-Type: " + isSSML ? "application/ssml+xml" : "text/plain");
+  headers.push_back("X-Microsoft-OutputFormat: audio-8khz-128kbitrate-mono-mp3");
+
+  // Proxy
+  std::ostringstream proxy_stream;
+  if (!http_proxy_ip.empty()) {
+    proxy_stream << "http://" << http_proxy_ip;
+    if (!http_proxy_port.empty()) {
+      proxy_stream << ":" << http_proxy_port;
+    }
+  }
+  proxy = proxy_stream.str();
+
+  return SWITCH_STATUS_SUCCESS;
+}
+
 switch_status_t deepgram_parse_text(const std::map<std::string, std::string>& params, const std::string& text, 
   std::string& url, std::string& body, std::vector<std::string>& headers) {
 
@@ -132,7 +200,7 @@ switch_status_t elevenlabs_parse_text(const std::map<std::string, std::string>& 
   return SWITCH_STATUS_SUCCESS;
 }
 
-switch_status_t tts_vendor_parse_text(const std::string& say, std::string& url, std::string& body, std::vector<std::string>& headers) {
+switch_status_t tts_vendor_parse_text(const std::string& say, std::string& url, std::string& body, std::vector<std::string>& headers, std::string& proxy) {
   size_t start = say.find("{") + 1;
   size_t end = say.find("}");
 
@@ -158,8 +226,10 @@ switch_status_t tts_vendor_parse_text(const std::string& say, std::string& url, 
     return elevenlabs_parse_text(params, text, url, body, headers);
   } else if (params["vendor"] == "deepgram") {
     return deepgram_parse_text(params, text, url, body, headers);
+  } else if (params["vendor"] == "microsoft") {
+    return azure_parse_text(params, text, url, body, headers, proxy);
   } else {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "tts_vendor_parse_text: There is no available parser for text\n");
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "tts_vendor_parse_text: There is no available parser for vendor %s\n", params["vendor"]);
     return SWITCH_STATUS_FALSE;
   }
 }

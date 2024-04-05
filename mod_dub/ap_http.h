@@ -68,7 +68,7 @@ public:
 
   void queueHttpGetAudio(const std::string& url, int gain = 0, bool loop = false);
   void queueHttpPostAudio(const std::string& url, int gain = 0, bool loop = false);
-  void queueHttpPostAudio(const std::string& url, const std::string& body, std::vector<std::string>& headers, int gain = 0, bool loop = false);
+  void queueHttpPostAudio(const std::string& url, const std::string& body, std::vector<std::string>& headers, const std::string& proxy, int gain = 0, bool loop = false);
 
   Status_t getStatus() const { return _status; }
   void setStatus(Status_t status) { _status = status; }
@@ -121,6 +121,7 @@ private:
   HttpMethod_t _method;
   std::string _url;
   std::string _body;
+  std::string _proxy;
   std::vector<std::string> _headers;
   Status_t _status;
   mpg123_handle *_mh;

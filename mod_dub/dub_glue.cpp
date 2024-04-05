@@ -98,18 +98,18 @@ extern "C" {
 
   switch_status_t say_dub_track(struct cap_cb* cb, char* trackName, char* text, int gain) {
     std::vector<std::string> headers;
-    std::string url, body;
+    std::string url, body, proxy;
     Track* track = find_track_by_name(cb->tracks, trackName);
 
     if (!track) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "play_dub_track: track %s not found\n", trackName);
       return SWITCH_STATUS_FALSE;
     }
-    if (tts_vendor_parse_text(text, url, body, headers) != SWITCH_STATUS_SUCCESS) {
+    if (tts_vendor_parse_text(text, url, body, headers, proxy) != SWITCH_STATUS_SUCCESS) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "say_dub_track: failed to parse text\n");
       return SWITCH_STATUS_FALSE;
     }
-    track->queueHttpPostAudio(url, body, headers, gain);
+    track->queueHttpPostAudio(url, body, headers, proxy, gain);
     return SWITCH_STATUS_SUCCESS;
   }
 

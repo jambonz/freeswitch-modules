@@ -14,7 +14,7 @@ public:
   /* audio production methods */
   void queueHttpGetAudio(const std::string& url, int gain = 0, bool loop = false);
   void queueHttpPostAudio(const std::string& url, int gain = 0, bool loop = false);
-  void queueHttpPostAudio(const std::string& url, const std::string& body, std::vector<std::string>& headers, int gain = 0, bool loop = false);
+  void queueHttpPostAudio(const std::string& url, const std::string& body, std::vector<std::string>& headers, const std::string& proxy, int gain = 0, bool loop = false);
   void queueFileAudio(const std::string& path, int gain = 0, bool loop = false);
   void removeAllAudio();
 

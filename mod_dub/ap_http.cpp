@@ -142,6 +142,8 @@ void AudioProducerHttp::start(std::function<void(bool, const std::string&)> call
   curl_easy_setopt(_easy, CURLOPT_MAX_RECV_SPEED_LARGE, (curl_off_t)31415);
   /*Add request body*/
   if (!_body.empty()) curl_easy_setopt(_easy, CURLOPT_POSTFIELDS, _body.c_str());
+  /*Add request proxy*/
+  if (!_proxy.empty()) curl_easy_setopt(_easy, CURLOPT_PROXY, _proxy.c_str());
 
   /*Add request headers*/
   struct curl_slist *hdr_list = nullptr;
@@ -167,11 +169,12 @@ void AudioProducerHttp::queueHttpPostAudio(const std::string& url, int gain, boo
   _gain = gain;
   _loop = loop;
 }
-void AudioProducerHttp::queueHttpPostAudio(const std::string& url, const std::string& body, std::vector<std::string>& headers, int gain, bool loop) {
+void AudioProducerHttp::queueHttpPostAudio(const std::string& url, const std::string& body, std::vector<std::string>& headers, const std::string& proxy, int gain, bool loop) {
   _method = HttpMethod_t::HTTP_METHOD_POST;
   _url = url;
   _body = body;
   _headers = headers;
+  _proxy = proxy;
   _gain = gain;
   _loop = loop;
 }
