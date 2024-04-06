@@ -25,10 +25,11 @@ Stop transcription on the channel.
 | variable | Description |
 | --- | ----------- |
 | DEEPGRAM_API_KEY | Deepgram API key used to authenticate |
-| DEEPGRAM_SPEECH_TIER | https://developers.deepgram.com/documentation/features/tier/ |
 | DEEPGRAM_SPEECH_CUSTOM_MODEL | custom model id |
 | DEEPGRAM_SPEECH_MODEL | https://developers.deepgram.com/documentation/features/model/ |
 | DEEPGRAM_SPEECH_MODEL_VERSION | https://developers.deepgram.com/documentation/features/version/ |
+| DEEPGRAM_SPEECH_ENABLE_SMART_FORMAT | https://developers.deepgram.com/docs/smart-format |
+| DEEPGRAM_SPEECH_ENABLE_FILLER_WORDS | https://developers.deepgram.com/docs/filler-words |
 | DEEPGRAM_SPEECH_ENABLE_AUTOMATIC_PUNCTUATION | https://developers.deepgram.com/documentation/features/punctuate/ |
 | DEEPGRAM_SPEECH_PROFANITY_FILTER | https://developers.deepgram.com/documentation/features/profanity-filter/ |
 | DEEPGRAM_SPEECH_REDACT | https://developers.deepgram.com/documentation/features/redact/ |
@@ -42,6 +43,7 @@ Stop transcription on the channel.
 | DEEPGRAM_SPEECH_REPLACE | https://developers.deepgram.com/documentation/features/replace/  |
 | DEEPGRAM_SPEECH_TAG | https://developers.deepgram.com/documentation/features/tag/ |
 | DEEPGRAM_SPEECH_ENDPOINTING  | https://developers.deepgram.com/documentation/features/endpointing/ |
+| DEEPGRAM_SPEECH_UTTERANCE_END_MS | https://developers.deepgram.com/docs/utterance-end |
 | DEEPGRAM_SPEECH_VAD_TURNOFF | https://developers.deepgram.com/documentation/features/voice-activity-detection/ |
 
 

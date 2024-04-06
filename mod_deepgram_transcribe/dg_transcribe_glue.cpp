@@ -184,6 +184,9 @@ namespace {
       * 
       */
     }
+    if (var = switch_channel_get_variable(channel, "DEEPGRAM_SPEECH_ENABLE_FILLER_WORDS")) {
+     oss <<  "&filler_words=true";
+    }
     if (var = switch_channel_get_variable(channel, "DEEPGRAM_SPEECH_ENABLE_AUTOMATIC_PUNCTUATION")) {
      oss <<  "&punctuate=true";
     }
