@@ -461,6 +461,7 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
     switch_core_session_t* session = switch_core_session_locate(d->session_id);
     if (session) {
       switch_channel_t *channel = switch_core_session_get_channel(session);
+      switch_core_session_rwunlock(session);
       if (channel) {
         switch_event_t *event;
         if (switch_event_create(&event, SWITCH_EVENT_PLAYBACK_START) == SWITCH_STATUS_SUCCESS) {
@@ -501,7 +502,6 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
       else {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "write_cb: channel not found\n");
       }
-      switch_core_session_rwunlock(session);
     }
     else {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "write_cb: session %s not found\n", d->session_id);
@@ -888,6 +888,7 @@ extern "C" {
       switch_core_session_t* session = switch_core_session_locate(d->session_id);
       if (session) {
         switch_channel_t *channel = switch_core_session_get_channel(session);
+        switch_core_session_rwunlock(session);
         if (channel) {
           switch_event_t *event;
           if (switch_event_create(&event, SWITCH_EVENT_PLAYBACK_STOP) == SWITCH_STATUS_SUCCESS) {
@@ -909,7 +910,6 @@ extern "C" {
         else {
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "write_cb: channel not found\n");
         }
-        switch_core_session_rwunlock(session);
       }
     }
     return SWITCH_STATUS_SUCCESS;
