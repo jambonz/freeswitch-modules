@@ -442,8 +442,6 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
   }
   {
     switch_mutex_lock(w->mutex);
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "write_cb: received data, response %ld\n", 
-      w->response_code);
 
     if (w->response_code > 0 && w->response_code != 200) {
       std::string body((char *) ptr, bytes_received);
@@ -482,6 +480,7 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
     switch_core_session_t* session = switch_core_session_locate(w->session_id);
     if (session) {
       switch_channel_t *channel = switch_core_session_get_channel(session);
+      switch_core_session_rwunlock(session);
       if (channel) {
         switch_event_t *event;
         if (switch_event_create(&event, SWITCH_EVENT_PLAYBACK_START) == SWITCH_STATUS_SUCCESS) {
@@ -525,7 +524,6 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
       else {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "write_cb: channel not found\n");
       }
-      switch_core_session_rwunlock(session);
     }
     else {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "write_cb: session %s not found\n", w->session_id);
@@ -810,6 +808,7 @@ extern "C" {
       switch_codec_implementation_t read_impl;
       switch_core_session_t *psession = switch_core_session_locate(w->session_id);
       switch_core_session_get_read_impl(psession, &read_impl);
+      switch_core_session_rwunlock(psession);
       uint32_t samples_per_second = !strcasecmp(read_impl.iananame, "g722") ? read_impl.actual_samples_per_second : read_impl.samples_per_second;
       if (mpg123_param(mh, MPG123_FORCE_RATE, samples_per_second /*Hz*/, 0) != MPG123_OK) {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error mpg123_param!\n");
@@ -897,8 +896,7 @@ extern "C" {
 
   switch_status_t whisper_speech_flush_tts(whisper_t* w) {
     bool download_complete = w->response_code == 200;
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "whisper_speech_flush_tts, download complete? %s\n", download_complete ? "yes" : "no") ;  
-
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "whisper_speech_flush_tts, download complete? %s\n", download_complete ? "yes" : "no") ;  
     ConnInfo_t *conn = (ConnInfo_t *) w->conn;
     CircularBuffer_t *cBuffer = (CircularBuffer_t *) w->circularBuffer;
     delete cBuffer;
@@ -930,6 +928,7 @@ extern "C" {
       switch_core_session_t* session = switch_core_session_locate(w->session_id);
       if (session) {
         switch_channel_t *channel = switch_core_session_get_channel(session);
+        switch_core_session_rwunlock(session);
         if (channel) {
           switch_event_t *event;
           if (switch_event_create(&event, SWITCH_EVENT_PLAYBACK_STOP) == SWITCH_STATUS_SUCCESS) {
@@ -951,14 +950,13 @@ extern "C" {
         else {
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "write_cb: channel not found\n");
         }
-        switch_core_session_rwunlock(session);
       }
     }
     return SWITCH_STATUS_SUCCESS;
   }
 
 	switch_status_t whisper_speech_close(whisper_t* w) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "whisper_speech_close\n") ;
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "whisper_speech_close\n") ;
 		return SWITCH_STATUS_SUCCESS;
 	}
 }

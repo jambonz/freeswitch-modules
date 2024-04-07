@@ -17,7 +17,7 @@ using namespace Microsoft::CognitiveServices::Speech;
 
 static std::string fullDirPath;
 
-static void start_synthesis(std::shared_ptr<SpeechSynthesizer> speechSynthesizer, const char* text) {
+static void start_synthesis(std::shared_ptr<SpeechSynthesizer> speechSynthesizer, const char* text, azure_t* a) {
     try {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "start_synthesis calling \n");
       auto result = std::strncmp(text, "<speak", 6) == 0 ?
@@ -25,20 +25,24 @@ static void start_synthesis(std::shared_ptr<SpeechSynthesizer> speechSynthesizer
         speechSynthesizer->SpeakTextAsync(text).get();
 
       if (result->Reason == ResultReason::SynthesizingAudioCompleted) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "start_synthesis completed id %s, audio data - bytes: %ld, milliseconds: %ld milliseconds\n", 
+        a->response_code = 200;
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "start_synthesis completed id %s, audio data - bytes: %ld, duration: %ldms\n", 
           result->ResultId.c_str(), result->GetAudioLength(), result->AudioDuration.count());
       } else if (result->Reason == ResultReason::Canceled) {
         auto cancellation = SpeechSynthesisCancellationDetails::FromResult(result);
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, 
-          "Error synthesizing text %s: (%d) %s.\n", text, static_cast<int>(cancellation->ErrorCode), cancellation->ErrorDetails.c_str());
+        a->response_code = static_cast<long int>(cancellation->ErrorCode);
+        a->err_msg = strdup(cancellation->ErrorDetails.c_str());
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error synthesizing text %d with error string: %s.\n",
+          static_cast<int>(cancellation->ErrorCode), cancellation->ErrorDetails.c_str());
       } else {
+        a->response_code = 500;
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error synthsize text %s (%d).\n", text, static_cast<int>(result->Reason));
       }
-
-      
     } catch (const std::exception& e) {
+        a->response_code = 500;
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "mod_azure_tts: Exception in start_synthesis %s\n",  e.what());
     }
+    a->draining = 1;
 }
 
 extern "C" {
@@ -179,7 +183,6 @@ extern "C" {
 
     speechSynthesizer->SynthesisStarted += [a](const SpeechSynthesisEventArgs& e) {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts SynthesisStarted\n");
-        a->response_code = 200;
     };
 
     speechSynthesizer->Synthesizing += [a](const SpeechSynthesisEventArgs& e) {
@@ -240,21 +243,7 @@ extern "C" {
       }
     };
 
-    speechSynthesizer->SynthesisCompleted += [a](const SpeechSynthesisEventArgs& e) {
-       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts SynthesisCompleted\n");
-       a->draining = 1;
-    };
-
-    speechSynthesizer->SynthesisCanceled += [a](const SpeechSynthesisEventArgs& e) {
-      if (e.Result->Reason == ResultReason::Canceled) {
-        auto cancellation = SpeechSynthesisCancellationDetails::FromResult(e.Result);
-        a->response_code = static_cast<long int>(cancellation->ErrorCode);
-        a->err_msg = strdup(cancellation->ErrorDetails.c_str());
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error synthesizing text %d with error string: %s.\n", static_cast<int>(cancellation->ErrorCode), cancellation->ErrorDetails.c_str());
-      }
-       a->draining = 1;
-    };
-    std::thread(start_synthesis, speechSynthesizer, text).detach();
+    std::thread(start_synthesis, speechSynthesizer, text, a).detach();
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts sent synthesize request\n");
     return SWITCH_STATUS_SUCCESS;
   }

@@ -6,7 +6,7 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_whisper_tts_shutdown);
 SWITCH_MODULE_DEFINITION(mod_whisper_tts, mod_whisper_tts_load, mod_whisper_tts_shutdown, NULL);
 
 static void clearWhisper(whisper_t* w, int freeAll) {
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "clearWhisper\n");
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "clearWhisper\n");
   if (w->api_key) free(w->api_key);
   if (w->model_id) free(w->model_id);
   if (w->speed) free(w->speed);
@@ -65,7 +65,7 @@ static switch_status_t w_speech_close(switch_speech_handle_t *sh, switch_speech_
 {
   switch_status_t rc;
   whisper_t *w = createOrRetrievePrivateData(sh);
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "w_speech_close\n");
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "w_speech_close\n");
 
   switch_mutex_destroy(w->mutex);
 
@@ -83,7 +83,7 @@ static switch_status_t w_speech_feed_tts(switch_speech_handle_t *sh, char *text,
   w->draining = 0;
   w->reads = 0;
 
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "w_speech_feed_tts\n");
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "w_speech_feed_tts\n");
 
   return whisper_speech_feed_tts(w, text, flags);
 }
@@ -94,7 +94,6 @@ static switch_status_t w_speech_feed_tts(switch_speech_handle_t *sh, char *text,
 static switch_status_t w_speech_read_tts(switch_speech_handle_t *sh, void *data, size_t *datalen, switch_speech_flag_t *flags)
 {
   whisper_t *w = createOrRetrievePrivateData(sh);
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "w_speech_read_tts\n");
   return whisper_speech_read_tts(w, data, datalen, flags);
 }
 
@@ -104,7 +103,7 @@ static switch_status_t w_speech_read_tts(switch_speech_handle_t *sh, void *data,
 static void w_speech_flush_tts(switch_speech_handle_t *sh)
 {
   whisper_t *w = createOrRetrievePrivateData(sh);
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "w_speech_flush_tts\n");
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "w_speech_flush_tts\n");
   whisper_speech_flush_tts(w);
 
   clearWhisper(w, 0);
@@ -113,7 +112,7 @@ static void w_speech_flush_tts(switch_speech_handle_t *sh)
 static void w_text_param_tts(switch_speech_handle_t *sh, char *param, const char *val)
 {
   whisper_t *w = createOrRetrievePrivateData(sh);
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "w_text_param_tts: %s=%s\n", param, val);
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "w_text_param_tts: %s=%s\n", param, val);
   if (0 == strcmp(param, "api_key")) {
     if (w->api_key) free(w->api_key);
     w->api_key = strdup(val);
