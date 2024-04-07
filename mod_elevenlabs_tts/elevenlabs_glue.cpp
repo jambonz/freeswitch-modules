@@ -662,7 +662,7 @@ extern "C" {
     /* create temp folder for cache files */
     const char* baseDir = std::getenv("JAMBONZ_TMP_CACHE_FOLDER");
     if (!baseDir) {
-      baseDir = "/var/";
+      baseDir = "/tmp/";
     }
     if (strcmp(baseDir, "/") == 0) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "failed to create folder %s\n", baseDir);
