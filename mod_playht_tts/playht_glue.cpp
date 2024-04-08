@@ -82,7 +82,7 @@ static CURL* createEasyHandle(void) {
 }
 
 static void cleanupConn(ConnInfo_t *conn) {
-  auto w = conn->playht;
+  auto p = conn->playht;
 
   if (conn->mh) {
     mpg123_close(conn->mh);
@@ -133,7 +133,7 @@ void check_multi_info(GlobalInfo_t *g) {
       curl_easy_getinfo(easy, CURLINFO_CONNECT_TIME, &connect);
       curl_easy_getinfo(easy, CURLINFO_TOTAL_TIME, &total);
 
-      auto w = conn->playht;
+      auto p = conn->playht;
       p->response_code = response_code;
       if (ct) p->ct = strdup(ct);
 
@@ -432,7 +432,7 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
   bool fireEvent = false;
   uint8_t *data = (uint8_t *) ptr;
   size_t bytes_received = size * nmemb;
-  auto w = conn->playht;
+  auto p = conn->playht;
   CircularBuffer_t *cBuffer = (CircularBuffer_t *) p->circularBuffer;
   std::vector<uint16_t> pcm_data;
   
@@ -506,9 +506,6 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
           }
           if (p->voice_name) {
             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_playht_voice_name", p->voice_name);
-          }
-          if (p->model_id) {
-            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_playht_model_id", p->model_id);
           }
           if (p->cache_filename) {
             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_cache_filename", p->cache_filename);
@@ -812,7 +809,7 @@ extern "C" {
 
     CURL* easy = createEasyHandle();
     p->conn = (void *) conn ;
-    conn->playht = w;
+    conn->playht = p;
     conn->easy = easy;
     conn->mh = mh;
     conn->global = &global;

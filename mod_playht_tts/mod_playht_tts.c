@@ -1,4 +1,4 @@
-#include "mod_playht_tts.h"clearPlayht
+#include "mod_playht_tts.h"
 #include "playht_glue.h"
 
 SWITCH_MODULE_LOAD_FUNCTION(mod_playht_tts_load);
