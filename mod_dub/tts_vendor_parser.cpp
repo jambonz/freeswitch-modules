@@ -184,6 +184,114 @@ switch_status_t deepgram_parse_text(const std::map<std::string, std::string>& pa
   return SWITCH_STATUS_SUCCESS;
 }
 
+switch_status_t playht_parse_text(const std::map<std::string, std::string>& params, const std::string& text, 
+  std::string& url, std::string& body, std::vector<std::string>& headers) {
+
+  std::string api_key;
+  std::string voice_name;
+  std::string user_id;
+  std::string quality;
+  std::string speed;
+  std::string seed;
+  std::string temperature;
+  std::string voice_engine;
+  std::string emotion;
+  std::string voice_guidance;
+  std::string style_guidance;
+  std::string text_guidance;
+
+  for (const auto& pair : params) {
+    if (pair.first == "api_key") {
+      api_key = pair.second;
+    } else if (pair.first == "voice") {
+      voice_name = pair.second;
+    } else if (pair.first == "user_id") {
+      user_id = pair.second;
+    } else if (pair.first == "quality") {
+      quality = pair.second;
+    } else if (pair.first == "speed") {
+      speed = pair.second;
+    } else if (pair.first == "seed") {
+      seed = pair.second;
+    } else if (pair.first == "temperature") {
+      temperature = pair.second;
+    } else if (pair.first == "voice_engine") {
+      voice_engine = pair.second;
+    }  else if (pair.first == "emotion") {
+      emotion = pair.second;
+    }  else if (pair.first == "voice_guidance") {
+      voice_guidance = pair.second;
+    }  else if (pair.first == "style_guidance") {
+      style_guidance = pair.second;
+    }  else if (pair.first == "text_guidance") {
+      text_guidance = pair.second;
+    }
+  }
+
+  if (api_key.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "playht_parse_text: no api_key provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
+  if (user_id.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "playht_parse_text: no user_id provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
+  if (voice_name.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "playht_parse_text: no voice_name provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
+
+  // URL
+  url = "https://api.play.ht/api/v2/tts/stream";
+
+  /* create the JSON body */
+  cJSON * jResult = cJSON_CreateObject();
+  cJSON_AddStringToObject(jResult, "text", text.c_str());
+  cJSON_AddStringToObject(jResult, "voice", voice_name.c_str());
+  cJSON_AddStringToObject(jResult, "output_format", "mp3");
+  cJSON_AddNumberToObject(jResult, "sample_rate", 8000);
+  if (!voice_engine.empty()) {
+    cJSON_AddStringToObject(jResult, "voice_engine", voice_engine.c_str());
+  }
+  if (!quality.empty()) {
+    cJSON_AddStringToObject(jResult, "quality", quality.c_str());
+  }
+  if (!speed.empty()) {
+    cJSON_AddNumberToObject(jResult, "speed", atoi(speed.c_str()));
+  }
+  if (!seed.empty()) {
+    cJSON_AddNumberToObject(jResult, "seed", atoi(seed.c_str()));
+  }
+  if (!temperature.empty()) {
+    cJSON_AddNumberToObject(jResult, "temperature", std::strtof(temperature.c_str(), nullptr));
+  }
+  if (!emotion.empty()) {
+    cJSON_AddStringToObject(jResult, "emotion", emotion.c_str());
+  }
+  if (!voice_guidance.empty()) {
+    cJSON_AddNumberToObject(jResult, "voice_guidance", atoi(voice_guidance.c_str()));
+  }
+  if (!style_guidance.empty()) {
+    cJSON_AddNumberToObject(jResult, "style_guidance", atoi(style_guidance.c_str()));
+  }
+  if (!text_guidance.empty()) {
+    cJSON_AddNumberToObject(jResult, "text_guidance", atoi(text_guidance.c_str()));
+  }
+  char* _body = cJSON_PrintUnformatted(jResult);
+  body = _body;
+
+  cJSON_Delete(jResult);
+  free(_body);
+
+  // Create headers
+  headers.push_back("AUTHORIZATION: " + api_key);
+  headers.push_back("X-USER-ID: " + user_id);
+  headers.push_back("Accept: audio/mpeg");
+  headers.push_back("Content-Type: application/json");
+
+  return SWITCH_STATUS_SUCCESS;
+}
+
 switch_status_t elevenlabs_parse_text(const std::map<std::string, std::string>& params, const std::string& text, 
   std::string& url, std::string& body, std::vector<std::string>& headers) {
 
@@ -297,6 +405,8 @@ switch_status_t tts_vendor_parse_text(const std::string& say, std::string& url, 
     return azure_parse_text(params, text, url, body, headers, proxy);
   } else if (params["vendor"] == "whisper") {
     return whisper_parse_text(params, text, url, body, headers);
+  } else if (params["vendor"] == "playht") {
+    return playht_parse_text(params, text, url, body, headers);
   } else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "tts_vendor_parse_text: There is no available parser for vendor %s\n", params["vendor"]);
     return SWITCH_STATUS_FALSE;
