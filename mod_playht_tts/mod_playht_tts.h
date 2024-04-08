@@ -14,6 +14,7 @@ typedef struct playht_data {
   char *emotion;
   char *voice_guidance;
   char *style_guidance;
+  char *text_guidance;
 
   /* result data */
   long response_code;

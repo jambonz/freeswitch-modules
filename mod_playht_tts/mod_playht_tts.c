@@ -17,6 +17,7 @@ static void clearPlayht(playht_t* p, int freeAll) {
   if (p->emotion) free(p->emotion);
   if (p->voice_guidance) free(p->voice_guidance);
   if (p->style_guidance) free(p->style_guidance);
+  if (p->text_guidance) free(p->text_guidance);
 
 
   if (p->request_id) free(p->request_id);
@@ -39,6 +40,7 @@ static void clearPlayht(playht_t* p, int freeAll) {
   p->emotion = NULL;
   p->voice_guidance = NULL;
   p->style_guidance = NULL;
+  p->text_guidance = NULL;
 
   p->request_id = NULL;
   p->reported_latency = NULL;
