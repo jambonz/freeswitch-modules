@@ -419,7 +419,7 @@ extern "C" {
     }
 
     std::string strHost(server + offset);
-    //- `([^/:]+)` captures the hostname/IP address.
+    //- `([^/:]+)` captures the hostname/IP address, match any character except in the set
     //- `:?([0-9]*)?` optionally captures a colon and the port number, if it's present.
     //- `(/.*)` captures everything else (the path).
     std::regex re("([^/:]+):?([0-9]*)?(/.*)?$");
