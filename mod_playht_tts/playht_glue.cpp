@@ -775,7 +775,7 @@ extern "C" {
     if (p->style_guidance) {
       cJSON_AddNumberToObject(jResult, "style_guidance", atoi(p->style_guidance));
     }
-    if (p->style_guidance) {
+    if (p->text_guidance) {
       cJSON_AddNumberToObject(jResult, "text_guidance", atoi(p->text_guidance));
     }
     char *json = cJSON_PrintUnformatted(jResult);
