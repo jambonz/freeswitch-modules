@@ -419,7 +419,7 @@ extern "C" {
     }
 
     std::string strHost(server + offset);
-    std::regex re("^(.+?):?(\\d+)?(/.*)?$");
+    std::regex re("([^/:]+):?([0-9]*)?(/.*)?$");
     std::smatch matches;
     if(std::regex_search(strHost, matches, re)) {
       /*
