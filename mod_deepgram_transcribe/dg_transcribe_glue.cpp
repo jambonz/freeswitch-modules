@@ -112,6 +112,8 @@ namespace {
           tech_pvt->resampler = NULL;
       }
 
+      // NB: do not destroy the mutex here, that is caller responsibility
+
       /*
       if (tech_pvt->vad) {
         switch_vad_destroy(&tech_pvt->vad);
@@ -295,9 +297,20 @@ namespace {
             break;
             case deepgram::AudioPipe::CONNECTION_DROPPED:
               // first thing: we can no longer access the AudioPipe
-              tech_pvt->pAudioPipe = nullptr;
-              tech_pvt->responseHandler(session, TRANSCRIBE_EVENT_DISCONNECT, NULL, tech_pvt->bugname, finished);
-              switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connection (%s) dropped from far end\n", tech_pvt->bugname);
+
+              /**
+               * this is a bit tricky.  If we just closed a previos connection it may be returning final transcripts
+               * and then a close event here as it is shutting down (in the reaper thread above).
+               * In this scenario, the fact that the connection is dropped is not significant.
+               */
+              if (finished) {
+                switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "old connection (%s) gracefully closed by Deepgram\n", tech_pvt->bugname);
+              }
+              else {
+                tech_pvt->pAudioPipe = nullptr;
+                tech_pvt->responseHandler(session, TRANSCRIBE_EVENT_DISCONNECT, NULL, tech_pvt->bugname, finished);
+                switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connection (%s) dropped from far end\n", tech_pvt->bugname);
+              }
             break;
             case deepgram::AudioPipe::CONNECTION_CLOSED_GRACEFULLY:
               // first thing: we can no longer access the AudioPipe
