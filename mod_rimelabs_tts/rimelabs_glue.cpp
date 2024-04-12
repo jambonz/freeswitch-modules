@@ -745,7 +745,6 @@ extern "C" {
     conn->hdr_list = NULL ;
     conn->file = d->file;
     conn->body = json;
-    free(json);
     conn->flushed = false;
     
 
