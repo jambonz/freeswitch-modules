@@ -18,6 +18,8 @@ using google::cloud::speech::v2::SpeechRecognitionAlternative;
 using google::cloud::speech::v2::PhraseSet;
 using google::cloud::speech::v2::PhraseSet_Phrase;
 using google::cloud::speech::v2::StreamingRecognizeResponse_SpeechEventType_END_OF_SINGLE_UTTERANCE;
+using google::cloud::speech::v2::StreamingRecognizeResponse_SpeechEventType_SPEECH_ACTIVITY_BEGIN;
+using google::cloud::speech::v2::StreamingRecognizeResponse_SpeechEventType_SPEECH_ACTIVITY_END;
 using google::cloud::speech::v2::ExplicitDecodingConfig_AudioEncoding_LINEAR16;
 using google::cloud::speech::v2::RecognitionFeatures_MultiChannelMode_SEPARATE_RECOGNITION_PER_CHANNEL;
 using google::cloud::speech::v2::SpeechAdaptation_AdaptationPhraseSet;
@@ -158,12 +160,54 @@ GStreamer<StreamingRecognizeRequest, StreamingRecognizeResponse, Speech::Stub>::
                 diarization_config->set_max_speaker_count(count);
             }
         }
+        if (var = switch_channel_get_variable(channel, "GOOGLE_SPEECH_TRANSCRIPTION_NORMALIZATION")) {
+          // parse JSON string
+        cJSON *json_array = cJSON_Parse(var);
+
+        int array_size = cJSON_GetArraySize(json_array);
+
+        for(int i=0; i<array_size; i++) {
+            cJSON* json_item = cJSON_GetArrayItem(json_array, i);
+
+            auto entry = config->mutable_transcript_normalization()->add_entries();
+
+            std::string search_string = cJSON_GetObjectItem(json_item, "search")->valuestring;
+            std::string replacement_string = cJSON_GetObjectItem(json_item, "replace")->valuestring;
+            bool case_sensitive = cJSON_GetObjectItem(json_item, "case_sensitive")->valueint != 0;
+
+            entry->set_search(search_string);
+            entry->set_replace(replacement_string);
+            entry->set_case_sensitive(case_sensitive);
+
+            switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(m_session), SWITCH_LOG_DEBUG,
+              "TRANSCRIPTION_NORMALIZATION search %s, replace %s, set_case_sensitive %d\n", search_string.c_str(), replacement_string.c_str(), case_sensitive);
+        }
+        // clean json
+        cJSON_Delete(json_array);
+      }
+    }
+    if (var = switch_channel_get_variable(channel, "GOOGLE_SPEECH_START_TIMEOUT_MS")) {
+      auto ms = atoi(var);
+      streaming_config->mutable_streaming_features()->mutable_voice_activity_timeout()->mutable_speech_start_timeout()->set_nanos(ms * 1000000);
+      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(m_session), SWITCH_LOG_DEBUG, "setting speech_start_timeout to %d milliseconds\n", ms);
+    }
+
+    if (var = switch_channel_get_variable(channel, "GOOGLE_SPEECH_END_TIMEOUT_MS")) {
+      auto ms = atoi(var);
+      streaming_config->mutable_streaming_features()->mutable_voice_activity_timeout()->mutable_speech_end_timeout()->set_nanos(ms * 1000000);
+      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(m_session), SWITCH_LOG_DEBUG, "setting speech_end_timeout to %d milliseconds\n", ms);
+    }
+
+    if (var = switch_channel_get_variable(channel, "GOOGLE_SPEECH_ENABLE_VOICE_ACTIVITY_EVENTS")) {
+      bool enabled = !strcmp(var, "true") ? 1 : 0;
+      streaming_config->mutable_streaming_features()->set_enable_voice_activity_events(enabled);
+      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(m_session), SWITCH_LOG_DEBUG, "setting enable_voice_activity_events to %d \n", enabled);
     }
 
     m_request.set_recognizer(recognizer);
     switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(m_session), SWITCH_LOG_DEBUG, "using recognizer: %s\n", recognizer.c_str());
 
-    // This must be set whether a recognizer id is provided orr not, because it cannot be configured as part of a recognizer.
+    // This must be set whether a recognizer id is provided or not, because it cannot be configured as part of a recognizer.
     if (interim > 0) {
         streaming_config->mutable_streaming_features()->set_interim_results(interim > 0);
     }
@@ -277,6 +321,12 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
         streamer->writesDone();
       }
     }
+    else if (speech_event_type == StreamingRecognizeResponse_SpeechEventType_SPEECH_ACTIVITY_BEGIN) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "grpc_read_thread: got SPEECH_ACTIVITY_BEGIN\n") ;
+    }
+    else if (speech_event_type == StreamingRecognizeResponse_SpeechEventType_SPEECH_ACTIVITY_END) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "grpc_read_thread: got SPEECH_ACTIVITY_END\n") ;
+    }
     switch_core_session_rwunlock(session);
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "grpc_read_thread: got %d responses\n", response.results_size());
   }
@@ -296,7 +346,7 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
           cb->responseHandler(session, "no_audio", cb->bugname);
         }
       }
-      else {
+      else if (status.error_code() != 0) {
         cJSON* json = cJSON_CreateObject();
         cJSON_AddStringToObject(json, "type", "error");
         cJSON_AddItemToObject(json, "error_code", cJSON_CreateNumber(status.error_code()));

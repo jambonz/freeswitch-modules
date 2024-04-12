@@ -76,6 +76,16 @@ static void responseHandler(switch_core_session_t* session, const char * json, c
 		switch_channel_event_set_data(channel, event);
 		switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "transcription-vendor", "google");
 	}
+	else if (0 == strcmp("start_of_speech", json)) {
+		switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, TRANSCRIBE_EVENT_START_OF_SPEECH);
+		switch_channel_event_set_data(channel, event);
+		switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "transcription-vendor", "google");
+	}
+	else if (0 == strcmp("end_of_speech", json)) {
+		switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, TRANSCRIBE_EVENT_END_OF_SPEECH);
+		switch_channel_event_set_data(channel, event);
+		switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "transcription-vendor", "google");
+	}
 	else if (0 == strcmp("end_of_transcript", json)) {
 		switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, TRANSCRIBE_EVENT_END_OF_TRANSCRIPT);
 		switch_channel_event_set_data(channel, event);
@@ -506,6 +516,14 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_transcribe_load)
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", TRANSCRIBE_EVENT_END_OF_UTTERANCE);
 		return SWITCH_STATUS_TERM;
 	}
+	if (switch_event_reserve_subclass(TRANSCRIBE_EVENT_START_OF_SPEECH) != SWITCH_STATUS_SUCCESS) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", TRANSCRIBE_EVENT_START_OF_SPEECH);
+		return SWITCH_STATUS_TERM;
+	}
+	if (switch_event_reserve_subclass(TRANSCRIBE_EVENT_END_OF_SPEECH) != SWITCH_STATUS_SUCCESS) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", TRANSCRIBE_EVENT_END_OF_SPEECH);
+		return SWITCH_STATUS_TERM;
+	}
 	if (switch_event_reserve_subclass(TRANSCRIBE_EVENT_START_OF_TRANSCRIPT) != SWITCH_STATUS_SUCCESS) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", TRANSCRIBE_EVENT_START_OF_TRANSCRIPT);
 		return SWITCH_STATUS_TERM;
@@ -556,6 +574,8 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_transcribe_shutdown)
 	google_speech_cleanup();
 	switch_event_free_subclass(TRANSCRIBE_EVENT_RESULTS);
 	switch_event_free_subclass(TRANSCRIBE_EVENT_END_OF_UTTERANCE);
+	switch_event_free_subclass(TRANSCRIBE_EVENT_START_OF_SPEECH);
+	switch_event_free_subclass(TRANSCRIBE_EVENT_END_OF_SPEECH);
 	switch_event_free_subclass(TRANSCRIBE_EVENT_START_OF_TRANSCRIPT);
 	switch_event_free_subclass(TRANSCRIBE_EVENT_END_OF_TRANSCRIPT);
 	switch_event_free_subclass(TRANSCRIBE_EVENT_NO_AUDIO_DETECTED);
