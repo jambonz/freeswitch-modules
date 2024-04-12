@@ -4,6 +4,73 @@
 #include <switch_json.h>
 #include <map>
 
+switch_status_t rimelabs_parse_text(const std::map<std::string, std::string>& params, const std::string& text, 
+  std::string& url, std::string& body, std::vector<std::string>& headers) {
+  std::string api_key;
+  std::string voice_name;
+  std::string model_id;
+  std::string speed_alpha;
+  std::string reduce_latency;
+
+  for (const auto& pair : params) {
+    if (pair.first == "api_key") {
+      api_key = pair.second;
+    } else if (pair.first == "voice") {
+      voice_name = pair.second;
+    } else if (pair.first == "model_id") {
+      model_id = pair.second;
+    } else if (pair.first == "speed_alpha") {
+      speed_alpha = pair.second;
+    }  else if (pair.first == "reduce_latency") {
+      reduce_latency = pair.second;
+    }
+  }
+
+  if (api_key.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "rimelabs_parse_text: no api_key provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
+  if (voice_name.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "rimelabs_parse_text: no voice_name provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
+  if (model_id.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "rimelabs_parse_text: no model_id provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
+
+  url = "https://users.rime.ai/v1/rime-tts";
+
+  /* create the JSON body */
+  cJSON * jResult = cJSON_CreateObject();
+  cJSON_AddStringToObject(jResult, "text", text.c_str());
+  cJSON_AddNumberToObject(jResult, "samplingRate", 8000);
+  if (!voice_name.empty()) {
+    cJSON_AddStringToObject(jResult, "speaker", voice_name.c_str());
+  }
+  if (!model_id.empty()) {
+    cJSON_AddStringToObject(jResult, "modelId", model_id.c_str());
+  }
+  if (!speed_alpha.empty()) {
+    cJSON_AddNumberToObject(jResult, "speedAlpha", std::strtof(speed_alpha.c_str(), nullptr));
+  }
+  if (!reduce_latency.empty()) {
+    cJSON_AddBoolToObject(jResult, "reduceLatency", !strcmp(reduce_latency.c_str(), "true") ? 1 : 0);
+  }
+  char* _body = cJSON_PrintUnformatted(jResult);
+  body = _body;
+
+  cJSON_Delete(jResult);
+  free(_body);
+
+  // Create headers
+  headers.push_back("Authorization: Bearer " + api_key);
+  headers.push_back("Accept: audio/mp3");
+  headers.push_back("Content-Type: application/json");
+
+  return SWITCH_STATUS_SUCCESS;
+}
+
 switch_status_t whisper_parse_text(const std::map<std::string, std::string>& params, const std::string& text, 
   std::string& url, std::string& body, std::vector<std::string>& headers) {
   std::string api_key;
@@ -407,6 +474,8 @@ switch_status_t tts_vendor_parse_text(const std::string& say, std::string& url, 
     return whisper_parse_text(params, text, url, body, headers);
   } else if (params["vendor"] == "playht") {
     return playht_parse_text(params, text, url, body, headers);
+  } else if (params["vendor"] == "rimelabs") {
+    return rimelabs_parse_text(params, text, url, body, headers);
   } else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "tts_vendor_parse_text: There is no available parser for vendor %s\n", params["vendor"]);
     return SWITCH_STATUS_FALSE;
