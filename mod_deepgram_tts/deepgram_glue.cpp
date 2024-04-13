@@ -522,7 +522,7 @@ static bool parseHeader(const std::string& str, std::string& header, std::string
     return true;
 }
 
-static int AudioProducerHttp::extract_response_code(const std::string& input) {
+static int extract_response_code(const std::string& input) {
   std::size_t space_pos = input.find(' ');
   if (space_pos == std::string::npos) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Invalid HTTP response format %s\n", input.c_str());
