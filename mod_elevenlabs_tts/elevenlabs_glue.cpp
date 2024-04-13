@@ -552,24 +552,6 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
   return bytes_received;
 }
 
-static int AudioProducerHttp::extract_response_code(const std::string& input) {
-  std::size_t space_pos = input.find(' ');
-  if (space_pos == std::string::npos) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Invalid HTTP response format %s\n", input.c_str());
-    return 0;
-  }
-
-  std::size_t code_start_pos = space_pos + 1;
-  std::size_t code_end_pos = input.find(' ', code_start_pos);
-  if (code_end_pos == std::string::npos) {
-    code_end_pos = input.length();
-  }
-
-  std::string code_str = input.substr(code_start_pos, code_end_pos - code_start_pos);
-  int response_code = std::stoi(code_str);
-  return response_code;
-}
-
 static int extract_response_code(const std::string& input) {
   std::size_t space_pos = input.find(' ');
   if (space_pos == std::string::npos) {
