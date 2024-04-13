@@ -541,9 +541,27 @@ static bool parseHeader(const std::string& str, std::string& header, std::string
     return true;
 }
 
+static int extract_response_code(const std::string& input) {
+  std::size_t space_pos = input.find(' ');
+  if (space_pos == std::string::npos) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Invalid HTTP response format %s\n", input.c_str());
+    return 0;
+  }
+
+  std::size_t code_start_pos = space_pos + 1;
+  std::size_t code_end_pos = input.find(' ', code_start_pos);
+  if (code_end_pos == std::string::npos) {
+    code_end_pos = input.length();
+  }
+
+  std::string code_str = input.substr(code_start_pos, code_end_pos - code_start_pos);
+  int response_code = std::stoi(code_str);
+  return response_code;
+}
+
 static size_t header_callback(char *buffer, size_t size, size_t nitems, ConnInfo_t *conn) {
   size_t bytes_received = size * nitems;
-  const std::string prefix = "HTTP/2 ";
+  const std::string prefix = "HTTP/";
   playht_t* p = conn->playht;
   std::string header, value;
   std::string input(buffer, bytes_received);
@@ -553,11 +571,11 @@ static size_t header_callback(char *buffer, size_t size, size_t nitems, ConnInfo
     else if (0 == header.compare("x-request-id")) p->request_id = strdup(value.c_str());
   }
   else {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "recv header: %s\n", input.c_str());
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "header_callback: %s\n", input.c_str());
     if (input.rfind(prefix, 0) == 0) {
       try {
-        p->response_code = std::stoi(input.substr(prefix.length()));
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "parsed response code: %ld\n", p->response_code);
+        p->response_code = extract_response_code(input);
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "header_callback: parsed response code: %ld\n", p->response_code);
       } catch (const std::invalid_argument& e) {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "header_callback: invalid response code %s\n", input.substr(prefix.length()).c_str());
       }
