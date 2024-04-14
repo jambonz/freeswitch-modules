@@ -470,8 +470,14 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "write_cb: firing playback-started\n");
 
           switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Playback-File-Type", "tts_stream");
-          if (d->reported_latency) {
-            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_deepgram_reported_latency_ms", d->reported_latency);
+          if (d->reported_model_name) {
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_deepgram_reported_model_name", d->reported_model_name);
+          }
+          if (d->reported_model_uuid) {
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_deepgram_reported_model_uuid", d->reported_model_uuid);
+          }
+          if (d->reported_char_count) {
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_deepgram_reported_char_count", d->reported_char_count);
           }
           if (d->request_id) {
             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_deepgram_request_id", d->request_id);
@@ -549,6 +555,9 @@ static size_t header_callback(char *buffer, size_t size, size_t nitems, ConnInfo
   if (parseHeader(input, header, value)) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "recv header: %s with value %s\n", header.c_str(), value.c_str());
     if (0 == header.compare("dg-request-id")) d->request_id = strdup(value.c_str());
+    else if (0 == header.compare("dg-model-name")) d->reported_model_name = strdup(value.c_str());
+    else if (0 == header.compare("dg-model-uuid")) d->reported_model_uuid = strdup(value.c_str());
+    else if (0 == header.compare("dg-char-count")) d->reported_char_count = strdup(value.c_str());
   }
   else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "header_callback: %s\n", input.c_str());

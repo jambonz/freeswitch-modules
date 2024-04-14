@@ -11,7 +11,14 @@ typedef struct deepgram_data {
   /* result data */
   long response_code;
   char *ct;
-  char *reported_latency;
+  // Deepgram hedaers
+  //dg-model-name
+  char *reported_model_name;
+  //dg-model-uuid
+  char *reported_model_uuid;
+  //dg-char-count
+  char *reported_char_count;
+  //dg-request-id
   char *request_id;
   char *name_lookup_time_ms;
   char *connect_time_ms;
