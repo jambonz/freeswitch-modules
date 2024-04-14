@@ -21,7 +21,6 @@ static void clearPlayht(playht_t* p, int freeAll) {
 
 
   if (p->request_id) free(p->request_id);
-  if (p->reported_latency) free(p->reported_latency);
   if (p->ct) free(p->ct);
   if (p->err_msg) free(p->err_msg);
   if (p->name_lookup_time_ms) free(p->name_lookup_time_ms);
@@ -43,7 +42,6 @@ static void clearPlayht(playht_t* p, int freeAll) {
   p->text_guidance = NULL;
 
   p->request_id = NULL;
-  p->reported_latency = NULL;
   p->ct = NULL;
   p->err_msg = NULL;
   p->name_lookup_time_ms = NULL;

@@ -10,7 +10,9 @@ static void cleardeepgram(deepgram_t* d, int freeAll) {
   if (d->api_key) free(d->api_key);
 
   if (d->request_id) free(d->request_id);
-  if (d->reported_latency) free(d->reported_latency);
+  if (d->reported_model_name) free(d->reported_model_name);
+  if (d->reported_model_uuid) free(d->reported_model_uuid);
+  if (d->reported_char_count) free(d->reported_char_count);
   if (d->ct) free(d->ct);
   if (d->err_msg) free(d->err_msg);
   if (d->name_lookup_time_ms) free(d->name_lookup_time_ms);
@@ -22,7 +24,9 @@ static void cleardeepgram(deepgram_t* d, int freeAll) {
   d->api_key = NULL;
   d->request_id = NULL;
 
-  d->reported_latency = NULL;
+  d->reported_model_name = NULL;
+  d->reported_model_uuid = NULL;
+  d->reported_char_count = NULL;
   d->ct = NULL;
   d->err_msg = NULL;
   d->name_lookup_time_ms = NULL;

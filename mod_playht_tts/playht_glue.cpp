@@ -489,9 +489,6 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "write_cb: firing playback-started\n");
 
           switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Playback-File-Type", "tts_stream");
-          if (p->reported_latency) {
-            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_playht_reported_latency_ms", p->reported_latency);
-          }
           if (p->request_id) {
             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_playht_request_id", p->request_id);
           }
@@ -567,8 +564,7 @@ static size_t header_callback(char *buffer, size_t size, size_t nitems, ConnInfo
   std::string input(buffer, bytes_received);
   if (parseHeader(input, header, value)) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "recv header: %s with value %s\n", header.c_str(), value.c_str());
-    if (0 == header.compare("openai-processing-ms")) p->reported_latency = strdup(value.c_str());
-    else if (0 == header.compare("x-request-id")) p->request_id = strdup(value.c_str());
+    if (0 == header.compare("x-job-ids")) p->request_id = strdup(value.c_str());
   }
   else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "header_callback: %s\n", input.c_str());

@@ -495,6 +495,18 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
           if (w->request_id) {
             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_whisper_request_id", w->request_id);
           }
+          if (w->reported_organization) {
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_whisper_reported_organization", w->reported_latency);
+          }
+          if (w->reported_ratelimit_requests) {
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_whisper_reported_ratelimit_requests", w->reported_ratelimit_requests);
+          }
+          if (w->reported_ratelimit_remaining_requests) {
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_whisper_reported_ratelimit_remaining_requests", w->reported_ratelimit_remaining_requests);
+          }
+          if (w->reported_ratelimit_reset_requests) {
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_whisper_reported_ratelimit_reset_requests", w->reported_ratelimit_reset_requests);
+          }
           if (w->name_lookup_time_ms) {
             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_whisper_name_lookup_time_ms", w->name_lookup_time_ms);
           }
@@ -572,6 +584,10 @@ static size_t header_callback(char *buffer, size_t size, size_t nitems, ConnInfo
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "recv header: %s with value %s\n", header.c_str(), value.c_str());
     if (0 == header.compare("openai-processing-ms")) w->reported_latency = strdup(value.c_str());
     else if (0 == header.compare("x-request-id")) w->request_id = strdup(value.c_str());
+    else if (0 == header.compare("openai-organization")) w->reported_organization = strdup(value.c_str());
+    else if (0 == header.compare("x-ratelimit-limit-requests")) w->reported_ratelimit_requests = strdup(value.c_str());
+    else if (0 == header.compare("x-ratelimit-remaining-requests")) w->reported_ratelimit_remaining_requests = strdup(value.c_str());
+    else if (0 == header.compare("x-ratelimit-reset-requests")) w->reported_ratelimit_reset_requests = strdup(value.c_str());
   }
   else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "header_callback: %s\n", input.c_str());

@@ -12,6 +12,10 @@ static void clearWhisper(whisper_t* w, int freeAll) {
   if (w->speed) free(w->speed);
   if (w->request_id) free(w->request_id);
   if (w->reported_latency) free(w->reported_latency);
+  if (w->reported_organization) free(w->reported_organization);
+  if (w->reported_ratelimit_requests) free(w->reported_ratelimit_requests);
+  if (w->reported_ratelimit_remaining_requests) free(w->reported_ratelimit_remaining_requests);
+  if (w->reported_ratelimit_reset_requests) free(w->reported_ratelimit_reset_requests);
   if (w->ct) free(w->ct);
   if (w->err_msg) free(w->err_msg);
   if (w->name_lookup_time_ms) free(w->name_lookup_time_ms);
@@ -25,6 +29,10 @@ static void clearWhisper(whisper_t* w, int freeAll) {
   w->speed = NULL;
   w->request_id = NULL;
   w->reported_latency = NULL;
+  w->reported_organization = NULL;
+  w->reported_ratelimit_requests = NULL;
+  w->reported_ratelimit_remaining_requests = NULL;
+  w->reported_ratelimit_reset_requests = NULL;
   w->ct = NULL;
   w->err_msg = NULL;
   w->name_lookup_time_ms = NULL;
