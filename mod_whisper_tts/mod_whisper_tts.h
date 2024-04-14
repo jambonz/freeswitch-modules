@@ -11,7 +11,18 @@ typedef struct whisper_data {
   /* result data */
   long response_code;
   char *ct;
+  //whisper headers
+  //openai-organization
+  char *reported_organization;
+  //openai-processing-ms
   char *reported_latency;
+  //x-ratelimit-limit-requests
+  char *reported_ratelimit_requests;
+  //x-ratelimit-remaining-requests
+  char *reported_ratelimit_remaining_requests;
+  //x-ratelimit-reset-requests
+  char *reported_ratelimit_reset_requests;
+  //x-request-id
   char *request_id;
   char *name_lookup_time_ms;
   char *connect_time_ms;
