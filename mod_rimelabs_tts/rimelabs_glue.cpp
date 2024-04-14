@@ -471,12 +471,6 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "write_cb: firing playback-started\n");
 
           switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Playback-File-Type", "tts_stream");
-          if (d->reported_latency) {
-            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_rimelabs_reported_latency_ms", d->reported_latency);
-          }
-          if (d->request_id) {
-            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_rimelabs_request_id", d->request_id);
-          }
           if (d->name_lookup_time_ms) {
             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_rimelabs_name_lookup_time_ms", d->name_lookup_time_ms);
           }
@@ -549,7 +543,6 @@ static size_t header_callback(char *buffer, size_t size, size_t nitems, ConnInfo
   std::string input(buffer, bytes_received);
   if (parseHeader(input, header, value)) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "recv header: %s with value %s\n", header.c_str(), value.c_str());
-    if (0 == header.compare("dg-request-id")) d->request_id = strdup(value.c_str());
   }
   else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "header_callback: %s\n", input.c_str());

@@ -12,8 +12,6 @@ static void clearrimelabs(rimelabs_t* d, int freeAll) {
   if (d->speed_alpha) free(d->speed_alpha);
   if (d->reduce_latency) free(d->reduce_latency);
 
-  if (d->request_id) free(d->request_id);
-  if (d->reported_latency) free(d->reported_latency);
   if (d->ct) free(d->ct);
   if (d->err_msg) free(d->err_msg);
   if (d->name_lookup_time_ms) free(d->name_lookup_time_ms);
@@ -27,8 +25,6 @@ static void clearrimelabs(rimelabs_t* d, int freeAll) {
   d->speed_alpha = NULL;
   d->reduce_latency = NULL;
 
-  d->request_id = NULL;
-  d->reported_latency = NULL;
   d->ct = NULL;
   d->err_msg = NULL;
   d->name_lookup_time_ms = NULL;

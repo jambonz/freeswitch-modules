@@ -14,8 +14,6 @@ typedef struct rimelabs_data {
   /* result data */
   long response_code;
   char *ct;
-  char *reported_latency;
-  char *request_id;
   char *name_lookup_time_ms;
   char *connect_time_ms;
   char *final_response_time_ms;
