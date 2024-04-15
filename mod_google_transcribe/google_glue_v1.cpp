@@ -339,7 +339,7 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
           cb->responseHandler(session, "no_audio", cb->bugname);
         }
       }
-      else {
+      else if (status.error_code() != 0)  {
         cJSON* json = cJSON_CreateObject();
         cJSON_AddStringToObject(json, "type", "error");
         cJSON_AddItemToObject(json, "error_code", cJSON_CreateNumber(status.error_code()));
