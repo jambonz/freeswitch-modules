@@ -47,17 +47,18 @@ static void start_synthesis(const char* text, google_t* g) {
       else {
         input->set_text(text);
       }
-      voice->set_name(g->voice_name);
-      
-      if (strcmp(g->gender, "MALE") == 0) {
-        voice->set_ssml_gender(google::cloud::texttospeech::v1::SsmlVoiceGender::MALE);
-      } else if (strcmp(g->gender, "FEMALE") == 0) {
-        voice->set_ssml_gender(google::cloud::texttospeech::v1::SsmlVoiceGender::FEMALE);
-      } else if (strcmp(g->gender, "NEUTRAL") == 0) {
-        voice->set_ssml_gender(google::cloud::texttospeech::v1::SsmlVoiceGender::NEUTRAL);
-      } else {
-        voice->set_ssml_gender(google::cloud::texttospeech::v1::SsmlVoiceGender::SSML_VOICE_GENDER_UNSPECIFIED);
+      if (g->gender) {
+        if (strcmp(g->gender, "MALE") == 0) {
+          voice->set_ssml_gender(google::cloud::texttospeech::v1::SsmlVoiceGender::MALE);
+        } else if (strcmp(g->gender, "FEMALE") == 0) {
+          voice->set_ssml_gender(google::cloud::texttospeech::v1::SsmlVoiceGender::FEMALE);
+        } else if (strcmp(g->gender, "NEUTRAL") == 0) {
+          voice->set_ssml_gender(google::cloud::texttospeech::v1::SsmlVoiceGender::NEUTRAL);
+        } else {
+          voice->set_ssml_gender(google::cloud::texttospeech::v1::SsmlVoiceGender::SSML_VOICE_GENDER_UNSPECIFIED);
+        }
       }
+
       if (g->model) {
         custom_voice->set_model(g->model);
         if (strcmp(g->reported_usage, "OFFLINE") == 0) {
@@ -67,6 +68,8 @@ static void start_synthesis(const char* text, google_t* g) {
         } else {
           custom_voice->set_reported_usage(google::cloud::texttospeech::v1::CustomVoiceParams_ReportedUsage::CustomVoiceParams_ReportedUsage_REPORTED_USAGE_UNSPECIFIED);
         }
+      } else {
+        voice->set_name(g->voice_name);
       }
       voice->set_language_code(g->language);
       audio_config->set_audio_encoding(AudioEncoding::LINEAR16);
@@ -230,8 +233,8 @@ extern "C" {
       return SWITCH_STATUS_FALSE;
     }
 
-    if (!g->voice_name) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "google_speech_feed_tts: no voice_name provided\n");
+    if (!g->voice_name && !g->model) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "google_speech_feed_tts: no voice_name or model provided\n");
       return SWITCH_STATUS_FALSE;
     }
 

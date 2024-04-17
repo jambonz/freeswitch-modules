@@ -111,7 +111,7 @@ static void g_text_param_tts(switch_speech_handle_t *sh, char *param, const char
   } else if (0 == strcmp(param, "voice")) {
     if (g->voice_name) free(g->voice_name);
     g->voice_name = strdup(val);
-  } else if (0 == strcmp(param, "custom_voice")) {
+  } else if (0 == strcmp(param, "model")) {
     if (g->model) free(g->model);
     g->model = strdup(val);
   } else if (0 == strcmp(param, "reported_usage")) {
