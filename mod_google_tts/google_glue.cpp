@@ -103,14 +103,16 @@ static void start_synthesis(const char* text, google_t* g) {
       bool fireEvent = false;
       CircularBuffer_t *cBuffer = (CircularBuffer_t *) g->circularBuffer;
       if (g->file) {
-        fwrite(audioData.data(), 1, audioData.size(), g->file);
+        // google return linear16 wav data that contains 44 bytes wav header, let remove them
+        fwrite(audioData.data() + 44, 1, audioData.size() - 44, g->file);
       }
 
       /**
        * this sort of reinterpretation can be dangerous as a general rule, but in this case we know that the data
        * is 16-bit PCM, so it's safe to do this and its much faster than copying the data byte by byte
        */
-      const uint16_t* begin = reinterpret_cast<const uint16_t*>(audioData.data());
+      // google return linear16 wav data that contains 44 bytes wav header, let remove them
+      const uint16_t* begin = reinterpret_cast<const uint16_t*>(audioData.data() + 44);
       const uint16_t* end = reinterpret_cast<const uint16_t*>(audioData.data() + audioData.size());
 
       /* lock as briefly as possible */
