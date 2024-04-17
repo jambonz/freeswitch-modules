@@ -141,7 +141,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_google_tts_load)
 
   *module_interface = switch_loadable_module_create_module_interface(pool, modname);
   speech_interface = switch_loadable_module_create_interface(*module_interface, SWITCH_SPEECH_INTERFACE);
-  speech_interface->interface_name = "microsoft";
+  speech_interface->interface_name = "google";
   speech_interface->speech_open = g_speech_open;
   speech_interface->speech_close = g_speech_close;
   speech_interface->speech_feed_tts = g_speech_feed_tts;
