@@ -9,7 +9,6 @@ static void clearGoogle(google_t* g, int freeAll) {
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "clearGoogle\n");
 
   if (g->cache_filename) free(g->cache_filename);
-  if (g->credential) free(g->credential);
   if (g->model) free(g->model);
   if (g->reported_usage) free(g->reported_usage);
   if (g->gender) free(g->gender);
@@ -17,7 +16,6 @@ static void clearGoogle(google_t* g, int freeAll) {
   if (g->err_msg) free(g->err_msg);
   
   g->cache_filename = NULL;
-  g->credential = NULL;
   g->model = NULL;
   g->reported_usage = NULL;
   g->gender = NULL;
@@ -105,10 +103,7 @@ static void g_text_param_tts(switch_speech_handle_t *sh, char *param, const char
 {
   google_t *g = createOrRetrievePrivateData(sh);
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "g_text_param_tts: %s=%s\n", param, val);
-  if (0 == strcmp(param, "credential")) {
-    if (g->credential) free(g->credential);
-    g->credential = strdup(val);
-  } else if (0 == strcmp(param, "voice")) {
+  if (0 == strcmp(param, "voice")) {
     if (g->voice_name) free(g->voice_name);
     g->voice_name = strdup(val);
   } else if (0 == strcmp(param, "model")) {

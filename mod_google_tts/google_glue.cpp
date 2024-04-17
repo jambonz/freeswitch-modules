@@ -26,6 +26,21 @@ typedef boost::circular_buffer<uint16_t> CircularBuffer_t;
 
 static std::string fullDirPath;
 
+static std::shared_ptr<grpc::Channel> create_grpc_channel(switch_channel_t *channel) {
+  const char* google_uri = "texttospeech.googleapis.com";
+  const char* var;
+  if (var = switch_channel_get_variable(channel, "GOOGLE_TTS_APPLICATION_CREDENTIALS")) {
+    auto channelCreds = grpc::SslCredentials(grpc::SslCredentialsOptions());
+    auto callCreds = grpc::ServiceAccountJWTAccessCredentials(var);
+    auto creds = grpc::CompositeChannelCredentials(channelCreds, callCreds);
+    return grpc::CreateChannel(google_uri, creds);
+  }
+  else {
+    auto creds = grpc::GoogleDefaultCredentials();
+    return grpc::CreateChannel(google_uri, creds);
+  }
+}
+
 static void start_synthesis(const char* text, google_t* g) {
     try {
       SynthesizeSpeechRequest request;
@@ -35,10 +50,11 @@ static void start_synthesis(const char* text, google_t* g) {
       auto voice = request.mutable_voice();
       auto custom_voice = voice->mutable_custom_voice();
       auto audio_config = request.mutable_audio_config();
-      auto channelCreds = grpc::SslCredentials(grpc::SslCredentialsOptions());
-      auto callCreds = grpc::ServiceAccountJWTAccessCredentials(g->credential);
-      auto creds = grpc::CompositeChannelCredentials(channelCreds, callCreds);
-      auto channel = grpc::CreateChannel("texttospeech.googleapis.com", creds);
+      /* lock and unlock session */
+      switch_core_session_t *psession = switch_core_session_locate(g->session_id);
+      switch_channel_t *swChannel = switch_core_session_get_channel(psession);
+      switch_core_session_rwunlock(psession);
+      auto channel = create_grpc_channel(swChannel);
       auto stub = TextToSpeech::NewStub(channel);
 
       if (strstr(text, "<speak") == text) {
@@ -221,11 +237,6 @@ extern "C" {
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error opening cache file %s: %s\n", outfile, strerror(errno));
         }
       }
-    }
-
-    if (!g->credential) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "google_speech_feed_tts: no credential provided\n");
-      return SWITCH_STATUS_FALSE;
     }
 
     if (!g->language) {

@@ -10,7 +10,6 @@ typedef struct google_data {
   char *reported_usage;
   char *language;
   char *gender;
-  char *credential;
 
   /* result data */
   long response_code;
