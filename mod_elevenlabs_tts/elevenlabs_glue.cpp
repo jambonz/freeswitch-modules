@@ -688,7 +688,7 @@ extern "C" {
       return SWITCH_STATUS_FALSE;
     }
 
-    fullDirPath = std::string(baseDir) + "jambonz-tts-cache-files";
+    fullDirPath = std::string(baseDir) + "tts-cache-files";
 
     // Create the directory with read, write, and execute permissions for everyone
     mode_t oldMask = umask(0);
