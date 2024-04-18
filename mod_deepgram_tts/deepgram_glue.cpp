@@ -385,7 +385,7 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
   auto d = conn->deepgram;
   CircularBuffer_t *cBuffer = (CircularBuffer_t *) d->circularBuffer;
   
-  if (conn->flushed) {
+  if (conn->flushed || cBuffer == nullptr) {
     /* this will abort the transfer */
     return 0;
   }
@@ -641,7 +641,7 @@ extern "C" {
       return SWITCH_STATUS_FALSE;
     }
 
-    fullDirPath = std::string(baseDir) + "jambonz-tts-cache-files";
+    fullDirPath = std::string(baseDir) + "tts-cache-files";
 
     // Create the directory with read, write, and execute permissions for everyone
     mode_t oldMask = umask(0);
