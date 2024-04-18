@@ -59,7 +59,7 @@ extern "C" {
       return SWITCH_STATUS_FALSE;
     }
 
-    fullDirPath = std::string(baseDir) + "jambonz-tts-cache-files";
+    fullDirPath = std::string(baseDir) + "tts-cache-files";
 
     // Create the directory with read, write, and execute permissions for everyone
     mode_t oldMask = umask(0);
@@ -179,72 +179,77 @@ extern "C" {
 			speechConfig->SetEndpointId(a->endpointId);
 		}
 
-    auto speechSynthesizer = SpeechSynthesizer::FromConfig(speechConfig);
+    try {
+      auto speechSynthesizer = SpeechSynthesizer::FromConfig(speechConfig);
 
-    speechSynthesizer->SynthesisStarted += [a](const SpeechSynthesisEventArgs& e) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts SynthesisStarted\n");
-    };
+      speechSynthesizer->SynthesisStarted += [a](const SpeechSynthesisEventArgs& e) {
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts SynthesisStarted\n");
+      };
 
-    speechSynthesizer->Synthesizing += [a](const SpeechSynthesisEventArgs& e) {
-      if (a->flushed) return;
-      bool fireEvent = false;
-      CircularBuffer_t *cBuffer = (CircularBuffer_t *) a->circularBuffer;
+      speechSynthesizer->Synthesizing += [a](const SpeechSynthesisEventArgs& e) {
+        if (a->flushed) return;
+        bool fireEvent = false;
+        CircularBuffer_t *cBuffer = (CircularBuffer_t *) a->circularBuffer;
 
-      auto audioData = e.Result->GetAudioData();
-      if (a->file) {
-        fwrite(audioData->data(), 1, audioData->size(), a->file);
-      }
+        auto audioData = e.Result->GetAudioData();
+        if (a->file) {
+          fwrite(audioData->data(), 1, audioData->size(), a->file);
+        }
 
-      /**
-       * this sort of reinterpretation can be dangerous as a general rule, but in this case we know that the data
-       * is 16-bit PCM, so it's safe to do this and its much faster than copying the data byte by byte
-       */
-      const uint16_t* begin = reinterpret_cast<const uint16_t*>(audioData->data());
-      const uint16_t* end = reinterpret_cast<const uint16_t*>(audioData->data() + audioData->size());
+        /**
+         * this sort of reinterpretation can be dangerous as a general rule, but in this case we know that the data
+         * is 16-bit PCM, so it's safe to do this and its much faster than copying the data byte by byte
+         */
+        const uint16_t* begin = reinterpret_cast<const uint16_t*>(audioData->data());
+        const uint16_t* end = reinterpret_cast<const uint16_t*>(audioData->data() + audioData->size());
 
-      /* lock as briefly as possible */
-      switch_mutex_lock(a->mutex);
-      if (cBuffer->capacity() - cBuffer->size() < audioData->size()) {
-        cBuffer->set_capacity(cBuffer->size() + std::max( audioData->size(), (size_t)BUFFER_SIZE));
-      }
-      cBuffer->insert(cBuffer->end(), begin, end);
-      switch_mutex_unlock(a->mutex);
+        /* lock as briefly as possible */
+        switch_mutex_lock(a->mutex);
+        if (cBuffer->capacity() - cBuffer->size() < audioData->size()) {
+          cBuffer->set_capacity(cBuffer->size() + std::max( audioData->size(), (size_t)BUFFER_SIZE));
+        }
+        cBuffer->insert(cBuffer->end(), begin, end);
+        switch_mutex_unlock(a->mutex);
 
-      if (0 == a->reads++) {
-        fireEvent = true;
-      }
+        if (0 == a->reads++) {
+          fireEvent = true;
+        }
 
-      if (fireEvent && a->session_id) {
-        auto endTime = std::chrono::high_resolution_clock::now();
-        auto startTime = *static_cast<std::chrono::time_point<std::chrono::high_resolution_clock>*>(a->startTime);
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-        auto time_to_first_byte_ms = std::to_string(duration.count());
-        switch_core_session_t* session = switch_core_session_locate(a->session_id);
-        if (session) {
-          switch_channel_t *channel = switch_core_session_get_channel(session);
-          switch_core_session_rwunlock(session);
-          if (channel) {
-            switch_event_t *event;
-            if (switch_event_create(&event, SWITCH_EVENT_PLAYBACK_START) == SWITCH_STATUS_SUCCESS) {
-              switch_channel_event_set_data(channel, event);
-              switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Playback-File-Type", "tts_stream");
-              switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_time_to_first_byte_ms", time_to_first_byte_ms.c_str());
-              if (a->cache_filename) {
-                switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_cache_filename", a->cache_filename);
+        if (fireEvent && a->session_id) {
+          auto endTime = std::chrono::high_resolution_clock::now();
+          auto startTime = *static_cast<std::chrono::time_point<std::chrono::high_resolution_clock>*>(a->startTime);
+          auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+          auto time_to_first_byte_ms = std::to_string(duration.count());
+          switch_core_session_t* session = switch_core_session_locate(a->session_id);
+          if (session) {
+            switch_channel_t *channel = switch_core_session_get_channel(session);
+            switch_core_session_rwunlock(session);
+            if (channel) {
+              switch_event_t *event;
+              if (switch_event_create(&event, SWITCH_EVENT_PLAYBACK_START) == SWITCH_STATUS_SUCCESS) {
+                switch_channel_event_set_data(channel, event);
+                switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Playback-File-Type", "tts_stream");
+                switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_time_to_first_byte_ms", time_to_first_byte_ms.c_str());
+                if (a->cache_filename) {
+                  switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_cache_filename", a->cache_filename);
+                }
+                switch_event_fire(&event);
+              } else {
+                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "speechSynthesizer->Synthesizing: failed to create event\n");
               }
-              switch_event_fire(&event);
-            } else {
-              switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "speechSynthesizer->Synthesizing: failed to create event\n");
+            }else {
+              switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "speechSynthesizer->Synthesizing: channel not found\n");
             }
-          }else {
-            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "speechSynthesizer->Synthesizing: channel not found\n");
           }
         }
-      }
-    };
+      };
 
-    std::thread(start_synthesis, speechSynthesizer, text, a).detach();
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts sent synthesize request\n");
+      std::thread(start_synthesis, speechSynthesizer, text, a).detach();
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts sent synthesize request\n");
+    } catch (const std::exception& e) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "mod_azure_tts: Exception: %s\n", e.what());
+      return SWITCH_STATUS_FALSE;
+    }
     return SWITCH_STATUS_SUCCESS;
   }
 
