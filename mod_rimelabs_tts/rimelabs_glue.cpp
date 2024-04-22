@@ -394,6 +394,8 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
   std::unique_ptr<uint8_t[]> combinedData;
 
   if (conn->has_last_byte) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "rimelabs write_cb:  processing last byte from previous read\n");
+
     conn->has_last_byte = false;  // We'll handle the last_byte now, so toggle the flag off
 
     // Allocate memory for the new data array
@@ -415,6 +417,8 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
 
   // If we now have an odd total, save the last byte for next time
   if ((total_bytes_to_process % sizeof(int16_t)) != 0) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "rimelabs write_cb: got odd number of bytes %d\n", total_bytes_to_process);
+
     conn->last_byte = data[total_bytes_to_process - 1];
     conn->has_last_byte = true;
     total_bytes_to_process--;
@@ -758,6 +762,8 @@ extern "C" {
     conn->file = d->file;
     conn->body = json;
     conn->flushed = false;
+    conn->has_last_byte = false;
+    conn->last_byte = 0;
     
 
     d->circularBuffer = (void *) new CircularBuffer_t(BUFFER_GROW_SIZE);

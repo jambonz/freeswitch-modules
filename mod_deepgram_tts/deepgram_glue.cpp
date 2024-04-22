@@ -764,7 +764,9 @@ extern "C" {
     conn->file = d->file;
     conn->body = json;
     conn->flushed = false;
-    
+    conn->has_last_byte = false;
+    conn->last_byte = 0;
+
 
     d->circularBuffer = (void *) new CircularBuffer_t(BUFFER_GROW_SIZE);
     // Always use deepgram at rate 8000 for helping cache audio from jambonz.
