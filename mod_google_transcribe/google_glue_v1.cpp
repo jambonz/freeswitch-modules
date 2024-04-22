@@ -340,11 +340,11 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
           cb->responseHandler(session, "no_audio", cb->bugname);
         }
       }
-      else if (status.error_code() != 0)  {
+      else if (status.error_code() != 0) {
         cJSON* json = cJSON_CreateObject();
         cJSON_AddStringToObject(json, "type", "error");
-        cJSON_AddStringToObject(json, "error_type", "stream_close");
-        cJSON_AddItemToObject(json, "error_cause", cJSON_CreateNumber(status.error_code()));
+        cJSON_AddStringToObject(json, "error_cause", "stream_close");
+        cJSON_AddItemToObject(json, "error_code", cJSON_CreateNumber(status.error_code()));
         cJSON_AddStringToObject(json, "error_message", status.error_message().c_str());
         char* jsonString = cJSON_PrintUnformatted(json);
         cb->responseHandler(session, jsonString, cb->bugname);
