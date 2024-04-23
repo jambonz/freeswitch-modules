@@ -4,6 +4,60 @@
 #include <switch_json.h>
 #include <map>
 
+
+switch_status_t custom_vendor_parse_text(const std::map<std::string, std::string>& params, const std::string& text, 
+  std::string& url, std::string& body, std::vector<std::string>& headers) {
+  std::string auth_token;
+  std::string voice_name;
+  std::string custom_tts_url;
+  std::string language;
+
+  for (const auto& pair : params) {
+    if (pair.first == "auth_token") {
+      auth_token = pair.second;
+    } else if (pair.first == "voice") {
+      voice_name = pair.second;
+    } else if (pair.first == "custom_tts_url") {
+      custom_tts_url = pair.second;
+    } else if (pair.first == "language") {
+      language = pair.second;
+    }
+  }
+
+  if (custom_tts_url.empty()) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "custom_vendor_parse_text: no custom_tts_url provided\n");
+    return SWITCH_STATUS_FALSE;
+  }
+
+  url = custom_tts_url;
+
+  /* create the JSON body */
+  cJSON * jResult = cJSON_CreateObject();
+  cJSON_AddStringToObject(jResult, "text", text.c_str());
+  cJSON_AddStringToObject(jResult, "type", text.substr(0, 6) == "<speak" ? "ssml" : "text");
+  cJSON_AddNumberToObject(jResult, "samplingRate", 8000);
+  if (!voice_name.empty()) {
+    cJSON_AddStringToObject(jResult, "voice", voice_name.c_str());
+  }
+  if (!language.empty()) {
+    cJSON_AddStringToObject(jResult, "language", language.c_str());
+  }
+  char* _body = cJSON_PrintUnformatted(jResult);
+  body = _body;
+
+  cJSON_Delete(jResult);
+  free(_body);
+
+  // Create headers
+  if (!auth_token.empty()) {
+    headers.push_back("Authorization: Bearer " + auth_token);
+  }
+  headers.push_back("Accept: audio/mp3");
+  headers.push_back("Content-Type: application/json");
+
+  return SWITCH_STATUS_SUCCESS;
+}
+
 switch_status_t rimelabs_parse_text(const std::map<std::string, std::string>& params, const std::string& text, 
   std::string& url, std::string& body, std::vector<std::string>& headers) {
   std::string api_key;
@@ -476,7 +530,9 @@ switch_status_t tts_vendor_parse_text(const std::string& say, std::string& url, 
     return playht_parse_text(params, text, url, body, headers);
   } else if (params["vendor"] == "rimelabs") {
     return rimelabs_parse_text(params, text, url, body, headers);
-  } else {
+  } else if (params["vendor"] == "custom") {
+    return custom_vendor_parse_text(params, text, url, body, headers);
+  }  else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "tts_vendor_parse_text: There is no available parser for vendor %s\n", params["vendor"]);
     return SWITCH_STATUS_FALSE;
   }

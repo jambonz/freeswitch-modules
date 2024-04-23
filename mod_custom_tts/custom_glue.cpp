@@ -833,6 +833,7 @@ extern "C" {
       api_key_stream << "Authorization: Bearer " << c->auth_token;
       conn->hdr_list = curl_slist_append(conn->hdr_list, api_key_stream.str().c_str());
     }
+    conn->hdr_list = curl_slist_append(conn->hdr_list, "Accept: audio/mpeg");
     conn->hdr_list = curl_slist_append(conn->hdr_list, "Content-Type: application/json");
     curl_easy_setopt(easy, CURLOPT_HTTPHEADER, conn->hdr_list);
 
