@@ -838,17 +838,9 @@ extern "C" {
 
     p->circularBuffer = (void *) new CircularBuffer_t(8192);
 
-    if (p->session_id) {
-      int err;
-      switch_codec_implementation_t read_impl;
-      switch_core_session_t *psession = switch_core_session_locate(p->session_id);
-      switch_core_session_get_read_impl(psession, &read_impl);
-      switch_core_session_rwunlock(psession);
-      uint32_t samples_per_second = !strcasecmp(read_impl.iananame, "g722") ? read_impl.actual_samples_per_second : read_impl.samples_per_second;
-      if (mpg123_param(mh, MPG123_FORCE_RATE, samples_per_second /*Hz*/, 0) != MPG123_OK) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error mpg123_param!\n");
-        return SWITCH_STATUS_FALSE;
-      }
+    if (mpg123_param(mh, MPG123_FORCE_RATE, p->rate /*Hz*/, 0) != MPG123_OK) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error mpg123_param!\n");
+      return SWITCH_STATUS_FALSE;
     }
 
     std::ostringstream api_key_stream;
