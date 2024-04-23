@@ -5,8 +5,8 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_custom_tts_load);
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_custom_tts_shutdown);
 SWITCH_MODULE_DEFINITION(mod_custom_tts, mod_custom_tts_load, mod_custom_tts_shutdown, NULL);
 
-static void clearWhisper(custom_t* c, int freeAll) {
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "clearWhisper\n");
+static void clearCustomVendor(custom_t* c, int freeAll) {
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "clearCustomVendor\n");
   if (c->auth_token) free(c->auth_token);
   if (c->custom_tts_url) free(c->custom_tts_url);
   if (c->language) free(c->language);
@@ -66,7 +66,7 @@ static switch_status_t w_speech_close(switch_speech_handle_t *sh, switch_speech_
   switch_mutex_destroy(c->mutex);
 
   rc = custom_speech_close(c);
-  clearWhisper(c, 1);
+  clearCustomVendor(c, 1);
   return rc;
 }
 
@@ -102,7 +102,7 @@ static void w_speech_flush_tts(switch_speech_handle_t *sh)
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "w_speech_flush_tts\n");
   custom_speech_flush_tts(c);
 
-  clearWhisper(c, 0);
+  clearCustomVendor(c, 0);
 }
 
 static void w_text_param_tts(switch_speech_handle_t *sh, char *param, const char *val)
