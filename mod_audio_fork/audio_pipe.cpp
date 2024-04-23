@@ -480,7 +480,7 @@ AudioPipe::AudioPipe(const char* uuid, const char* host, unsigned int port, cons
 }
 AudioPipe::~AudioPipe() {
   if (m_audio_buffer) delete [] m_audio_buffer;
-  if (m_recv_buf) delete [] m_recv_buf;
+  if (m_recv_buf) free(m_recv_buf);
 }
 
 void AudioPipe::connect(void) {
