@@ -135,23 +135,12 @@ extern "C" {
       return SWITCH_STATUS_FALSE;
     }
 
-    if (a->session_id) {
+    if (a->rate != 8000 /*Hz*/) {
       int err;
-      switch_codec_implementation_t read_impl;
-      
-      /* lock and unlock session */
-      switch_core_session_t *psession = switch_core_session_locate(a->session_id);
-      switch_core_session_get_read_impl(psession, &read_impl);
-      switch_core_session_rwunlock(psession);
-
-      uint32_t samples_per_second = !strcasecmp(read_impl.iananame, "g722") ? read_impl.actual_samples_per_second : read_impl.samples_per_second;
-      a->samples_rate = samples_per_second;
-      if (samples_per_second != 8000 /*Hz*/) {
-        a->resampler = speex_resampler_init(1, 8000, samples_per_second, SWITCH_RESAMPLE_QUALITY, &err);
-        if (0 != err) {
-          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error initializing resampler: %s.\n", speex_resampler_strerror(err));
-          return SWITCH_STATUS_FALSE;
-        }
+      a->resampler = speex_resampler_init(1, 8000, a->rate, SWITCH_RESAMPLE_QUALITY, &err);
+      if (0 != err) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error initializing resampler: %s.\n", speex_resampler_strerror(err));
+        return SWITCH_STATUS_FALSE;
       }
     }
 
@@ -276,9 +265,7 @@ extern "C" {
       return SWITCH_STATUS_SUCCESS;
     }
     // azure returned 8000hz 16 bit data, we have to take enough data based on call sample rate.
-    size_t size = a->samples_rate ?
-      std::min((*datalen/(2 * a->samples_rate / 8000)), bufSize) :
-      std::min((*datalen/2), bufSize);
+    size_t size = std::min((*datalen/(2 * a->rate / 8000)), bufSize);
     pcm_data.insert(pcm_data.end(), cBuffer->begin(), cBuffer->begin() + size);
     cBuffer->erase(cBuffer->begin(), cBuffer->begin() + size);
     switch_mutex_unlock(a->mutex);

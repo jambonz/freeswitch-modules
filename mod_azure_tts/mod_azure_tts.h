@@ -25,7 +25,6 @@ typedef struct azure_data {
   int reads;
   int cache_audio;
   int flushed;
-  uint32_t samples_rate;
 
   void *startTime;
 
