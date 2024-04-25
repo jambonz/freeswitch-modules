@@ -585,8 +585,9 @@ extern "C" {
         tech_pvt->frame_count = 0;
         deepgram::AudioPipe *pAudioPipe = static_cast<deepgram::AudioPipe *>(tech_pvt->pAudioPipe);
         pAudioPipe->bufferForSending(keep_alive);
-        return SWITCH_TRUE;
+        switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "dg_transcribe_frame: sending %s to deepgram\n", keep_alive);
       }
+      return SWITCH_TRUE;
     }
     
     if (switch_mutex_trylock(tech_pvt->mutex) == SWITCH_STATUS_SUCCESS) {
