@@ -503,9 +503,11 @@ extern "C" {
     switch_channel_t *channel = switch_core_session_get_channel(session);
     switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, bugname);
     private_t* tech_pvt;
+    bool has_connection = false;
     if (bug) {
       switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "reuse existing kep alive deepgram connection\n");
       tech_pvt = (private_t*) switch_core_media_bug_get_user_data(bug);
+      has_connection = true;
     } else {
       tech_pvt = (private_t *) switch_core_session_alloc(session, sizeof(private_t));
       tech_pvt->pAudioPipe = NULL;
@@ -526,11 +528,13 @@ extern "C" {
     }
 
     *ppUserData = tech_pvt;
+    if (!has_connection) {
+      deepgram::AudioPipe *pAudioPipe = static_cast<deepgram::AudioPipe *>(tech_pvt->pAudioPipe);
+      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connecting now\n");
+      pAudioPipe->connect();
+      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connection in progress\n");
+    }
 
-    deepgram::AudioPipe *pAudioPipe = static_cast<deepgram::AudioPipe *>(tech_pvt->pAudioPipe);
-    switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connecting now\n");
-    pAudioPipe->connect();
-    switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connection in progress\n");
     return SWITCH_STATUS_SUCCESS;
   }
 
