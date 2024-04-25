@@ -39,6 +39,9 @@ struct private_data {
   unsigned int id;
   int buffer_overrun_notified:1;
   int is_finished:1;
+  int is_keep_alive;
+  int frame_count;
+  char *configuration;
 };
 
 typedef struct private_data private_t;
