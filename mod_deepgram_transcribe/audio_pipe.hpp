@@ -76,6 +76,7 @@ namespace deepgram {
 
     void close() ;
     void finish();
+    void finish_in_silence();
     void waitForClose();
     void setClosed() { m_promise.set_value(); }
     bool isFinished() { return m_finished;}
@@ -138,6 +139,7 @@ namespace deepgram {
     std::string m_bugname;
     std::promise<void> m_promise;
     bool m_useTls;
+    bool m_silence_disconnect;
   };
 
 } // namespace deepgram

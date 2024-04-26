@@ -87,13 +87,17 @@ namespace {
   static const char* emptyTranscript = 
     "\"is_final\":false,\"speech_final\":false,\"channel\":{\"alternatives\":[{\"transcript\":\"\",\"confidence\":0.0,\"words\":[]}]}";
 
-  static void reaper(private_t *tech_pvt) {
+  static void reaper(private_t *tech_pvt, bool silence_disconnect) {
     std::shared_ptr<deepgram::AudioPipe> pAp;
     pAp.reset((deepgram::AudioPipe *)tech_pvt->pAudioPipe);
     tech_pvt->pAudioPipe = nullptr;
 
-    std::thread t([pAp, tech_pvt]{
-      pAp->finish();
+    std::thread t([pAp, tech_pvt, silence_disconnect]{
+      if (silence_disconnect) {
+        pAp->finish_in_silence();
+      } else {
+        pAp->finish();
+      }
       pAp->waitForClose();
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "%s (%u) got remote close\n", tech_pvt->sessionId, tech_pvt->id);
     });
@@ -353,8 +357,6 @@ namespace {
 
     switch_core_session_get_read_impl(session, &read_impl);
   
-    memset(tech_pvt, 0, sizeof(private_t));
-  
     std::string path;
     constructPath(session, path, desiredSampling, channels, lang, interim);
     switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "path: %s\n", path.c_str());
@@ -385,30 +387,34 @@ namespace {
       return SWITCH_STATUS_FALSE;
     }
 
-    configuration_stream << tech_pvt->host << ":" <<
-      tech_pvt->port << ";" <<
-      tech_pvt->path << ";" <<
+    configuration_stream <<
+      host << ":" <<
+      port << ";" <<
+      path << ";" <<
       buflen << ";" <<
       read_impl.decoded_bytes_per_packet << ";" <<
       apiKey << ";" <<
       useTls;
 
     if (tech_pvt->pAudioPipe) {
-      if (0 != strcmp(tech_pvt->configuration, configuration_stream.str().c_str())) {
+      if (0 == strcmp(tech_pvt->configuration, configuration_stream.str().c_str())) {
         switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "fork_data_init: stop existing deepgram connection, old configuration %s, new configuration %s\n",
           tech_pvt->configuration, configuration_stream.str().c_str());
-        reaper(tech_pvt);
+        reaper(tech_pvt, true);
       } else {
         switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "fork_data_init: enable existing deepgram connection\n");
         tech_pvt->is_keep_alive = 0;
         return SWITCH_STATUS_SUCCESS;
       }
+    } else {
+      memset(tech_pvt, 0, sizeof(private_t));
     }
 
     strncpy(tech_pvt->sessionId, switch_core_session_get_uuid(session), MAX_SESSION_ID);
     strncpy(tech_pvt->host, host.c_str(), MAX_WS_URL_LEN);
     tech_pvt->port = port;
-    strncpy(tech_pvt->path, path.c_str(), MAX_PATH_LEN);    
+    strncpy(tech_pvt->path, path.c_str(), MAX_PATH_LEN);   
+    strncpy(tech_pvt->configuration, configuration_stream.str().c_str(), MAX_PATH_LEN) ;
     tech_pvt->sampling = desiredSampling;
     tech_pvt->responseHandler = responseHandler;
     tech_pvt->channels = channels;
@@ -512,7 +518,6 @@ extern "C" {
       tech_pvt = (private_t *) switch_core_session_alloc(session, sizeof(private_t));
       tech_pvt->pAudioPipe = NULL;
       tech_pvt->is_keep_alive = 0;
-      tech_pvt->configuration = NULL;
       tech_pvt->mutex = NULL;
       tech_pvt->resampler = NULL;
     }
@@ -565,7 +570,7 @@ extern "C" {
     if (!channelIsClosing) switch_core_media_bug_remove(session, &bug);
 
     deepgram::AudioPipe *pAudioPipe = static_cast<deepgram::AudioPipe *>(tech_pvt->pAudioPipe);
-    if (pAudioPipe) reaper(tech_pvt);
+    if (pAudioPipe) reaper(tech_pvt, false);
     destroy_tech_pvt(tech_pvt);
     switch_mutex_unlock(tech_pvt->mutex);
     switch_mutex_destroy(tech_pvt->mutex);
@@ -646,7 +651,6 @@ extern "C" {
           if (frame.datalen) {
             spx_uint32_t out_len = available >> 1;  // space for samples which are 2 bytes
             spx_uint32_t in_len = frame.samples;
-
             speex_resampler_process_interleaved_int(tech_pvt->resampler, 
               (const spx_int16_t *) frame.data, 
               (spx_uint32_t *) &in_len, 

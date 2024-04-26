@@ -176,7 +176,9 @@ int AudioPipe::lws_callback(struct lws *wsi,
           if (lws_is_final_fragment(wsi)) {
             if (nullptr != ap->m_recv_buf) {
               std::string msg((char *)ap->m_recv_buf, ap->m_recv_buf_ptr - ap->m_recv_buf);
-              ap->m_callback(ap->m_uuid.c_str(),  ap->m_bugname.c_str(), deepgram::AudioPipe::MESSAGE, msg.c_str(),  ap->isFinished());
+              if (!ap->m_silence_disconnect) {
+                ap->m_callback(ap->m_uuid.c_str(),  ap->m_bugname.c_str(), deepgram::AudioPipe::MESSAGE, msg.c_str(),  ap->isFinished());
+              }
               if (nullptr != ap->m_recv_buf) free(ap->m_recv_buf);
             }
             ap->m_recv_buf = ap->m_recv_buf_ptr = nullptr;
@@ -451,7 +453,7 @@ AudioPipe::AudioPipe(const char* uuid, const char* bugname, const char* host, un
   m_uuid(uuid), m_host(host), m_port(port), m_path(path), m_finished(false), m_bugname(bugname),
   m_audio_buffer_min_freespace(minFreespace), m_audio_buffer_max_len(bufLen), m_gracefulShutdown(false),
   m_audio_buffer_write_offset(LWS_PRE), m_recv_buf(nullptr), m_recv_buf_ptr(nullptr), m_useTls(useTls),
-  m_state(LWS_CLIENT_IDLE), m_wsi(nullptr), m_vhd(nullptr), m_callback(callback) {
+  m_state(LWS_CLIENT_IDLE), m_wsi(nullptr), m_vhd(nullptr), m_callback(callback), m_silence_disconnect(false) {
 
   if (apiKey) m_apiKey = apiKey;
   else m_apiKey = "";
@@ -514,6 +516,11 @@ void AudioPipe::finish() {
   if (m_finished || m_state != LWS_CLIENT_CONNECTED) return;
   m_finished = true;
   bufferForSending("{\"type\": \"CloseStream\"}");
+}
+
+void AudioPipe::finish_in_silence() {
+  m_silence_disconnect = true;
+  finish();
 }
 
 void AudioPipe::waitForClose() {

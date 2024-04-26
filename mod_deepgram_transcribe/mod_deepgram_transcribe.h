@@ -41,7 +41,7 @@ struct private_data {
   int is_finished:1;
   int is_keep_alive;
   int frame_count;
-  char *configuration;
+  char configuration[MAX_PATH_LEN];
 };
 
 typedef struct private_data private_t;
