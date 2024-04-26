@@ -397,13 +397,14 @@ namespace {
       useTls;
 
     if (tech_pvt->pAudioPipe) {
-      if (0 == strcmp(tech_pvt->configuration, configuration_stream.str().c_str())) {
+      // stop sending keep alive
+      tech_pvt->is_keep_alive = 0;
+      if (0 != strcmp(tech_pvt->configuration, configuration_stream.str().c_str())) {
         switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "fork_data_init: stop existing deepgram connection, old configuration %s, new configuration %s\n",
           tech_pvt->configuration, configuration_stream.str().c_str());
         reaper(tech_pvt, true);
       } else {
         switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "fork_data_init: enable existing deepgram connection\n");
-        tech_pvt->is_keep_alive = 0;
         return SWITCH_STATUS_SUCCESS;
       }
     } else {
@@ -431,6 +432,10 @@ namespace {
     }
 
     tech_pvt->pAudioPipe = static_cast<void *>(ap);
+
+    switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connecting now\n");
+    ap->connect();
+    switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connection in progress\n");
 
     if (!tech_pvt->mutex) {
       switch_mutex_init(&tech_pvt->mutex, SWITCH_MUTEX_NESTED, switch_core_session_get_pool(session));
@@ -509,11 +514,9 @@ extern "C" {
     switch_channel_t *channel = switch_core_session_get_channel(session);
     switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, bugname);
     private_t* tech_pvt;
-    bool has_connection = false;
     if (bug) {
       switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "reuse existing kep alive deepgram connection\n");
       tech_pvt = (private_t*) switch_core_media_bug_get_user_data(bug);
-      has_connection = true;
     } else {
       tech_pvt = (private_t *) switch_core_session_alloc(session, sizeof(private_t));
       tech_pvt->pAudioPipe = NULL;
@@ -533,12 +536,6 @@ extern "C" {
     }
 
     *ppUserData = tech_pvt;
-    if (!has_connection) {
-      deepgram::AudioPipe *pAudioPipe = static_cast<deepgram::AudioPipe *>(tech_pvt->pAudioPipe);
-      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connecting now\n");
-      pAudioPipe->connect();
-      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connection in progress\n");
-    }
 
     return SWITCH_STATUS_SUCCESS;
   }
@@ -587,6 +584,7 @@ extern "C" {
     char *keep_alive = (char *) "{\"type\": \"KeepAlive\"}";
 
     if (!tech_pvt) return SWITCH_TRUE;
+    
 
     // Keep sending keep alive if there is no transcribe activity
     if (tech_pvt->is_keep_alive && tech_pvt->pAudioPipe) {
@@ -609,7 +607,6 @@ extern "C" {
         switch_mutex_unlock(tech_pvt->mutex);
         return SWITCH_TRUE;
       }
-
       pAudioPipe->lockAudioBuffer();
       size_t available = pAudioPipe->binarySpaceAvailable();
       if (NULL == tech_pvt->resampler) {
