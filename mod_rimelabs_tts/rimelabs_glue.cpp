@@ -804,7 +804,9 @@ extern "C" {
     curl_easy_setopt(easy, CURLOPT_POSTFIELDS, conn->body);
     //curl_easy_setopt(easy, CURLOPT_POSTFIELDSIZE, body.length());
 
-    curl_easy_setopt(easy, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
+    // libcurl adding random byte to the response body that creates white noise to audio file
+    // https://github.com/curl/curl/issues/10525
+    curl_easy_setopt(easy, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
 
     rc = curl_multi_add_handle(global.multi, conn->easy);
     mcode_test("new_conn: curl_multi_add_handle", rc);

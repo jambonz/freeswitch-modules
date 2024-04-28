@@ -177,7 +177,6 @@ static CURL* createEasyHandle(void) {
 
   curl_easy_setopt(easy, CURLOPT_FOLLOWLOCATION, 1L);
   curl_easy_setopt(easy, CURLOPT_USERAGENT, "jambonz/0.8.5");
-  curl_easy_setopt(easy, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
 
   // set connect timeout to 3 seconds and total timeout to 109 seconds
   curl_easy_setopt(easy, CURLOPT_CONNECTTIMEOUT_MS, 3000L);
@@ -887,7 +886,9 @@ extern "C" {
     curl_easy_setopt(easy, CURLOPT_POSTFIELDS, conn->body);
     //curl_easy_setopt(easy, CURLOPT_POSTFIELDSIZE, body.length());
 
-    curl_easy_setopt(easy, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
+    // libcurl adding random byte to the response body that creates white noise to audio file
+    // https://github.com/curl/curl/issues/10525
+    curl_easy_setopt(easy, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
 
     rc = curl_multi_add_handle(global.multi, conn->easy);
     mcode_test("new_conn: curl_multi_add_handle", rc);
