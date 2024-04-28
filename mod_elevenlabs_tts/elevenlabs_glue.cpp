@@ -177,6 +177,7 @@ static CURL* createEasyHandle(void) {
 
   curl_easy_setopt(easy, CURLOPT_FOLLOWLOCATION, 1L);
   curl_easy_setopt(easy, CURLOPT_USERAGENT, "jambonz/0.8.5");
+  curl_easy_setopt(easy, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
 
   // set connect timeout to 3 seconds and total timeout to 109 seconds
   curl_easy_setopt(easy, CURLOPT_CONNECTTIMEOUT_MS, 3000L);
