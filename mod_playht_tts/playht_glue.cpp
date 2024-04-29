@@ -875,7 +875,8 @@ extern "C" {
 
     // libcurl adding random byte to the response body that creates white noise to audio file
     // https://github.com/curl/curl/issues/10525
-    curl_easy_setopt(easy, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    const bool disable_http_2 = switch_true(std::getenv("DISABLE_HTTP2_FOR_TTS_STREAMING"));
+    curl_easy_setopt(easy, CURLOPT_HTTP_VERSION, disable_http_2 ? CURL_HTTP_VERSION_1_1 : CURL_HTTP_VERSION_2_0);
 
     rc = curl_multi_add_handle(global.multi, conn->easy);
     mcode_test("new_conn: curl_multi_add_handle", rc);
