@@ -136,7 +136,10 @@ void AudioProducerHttp::start(std::function<void(bool, const std::string&)> call
   /* call this function to close a socket */
   curl_easy_setopt(_easy, CURLOPT_CLOSESOCKETFUNCTION, &AudioProducerHttp::close_socket);
 
-  curl_easy_setopt(_easy, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
+  // libcurl adding random byte to the response body that creates white noise to audio file
+  // https://github.com/curl/curl/issues/10525
+  const bool disable_http_2 = switch_true(std::getenv("DISABLE_HTTP2_FOR_TTS_STREAMING"));
+  curl_easy_setopt(_easy, CURLOPT_HTTP_VERSION, disable_http_2 ? CURL_HTTP_VERSION_1_1 : CURL_HTTP_VERSION_2_0);
 
   /* keep the speed down so we don't have to buffer large amounts*/
   curl_easy_setopt(_easy, CURLOPT_MAX_RECV_SPEED_LARGE, (curl_off_t)31415);
