@@ -451,9 +451,6 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
   }
   {
     switch_mutex_lock(el->mutex);
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "write_cb: received data, response %ld\n", 
-      el->response_code);
-
     if (el->response_code > 0 && el->response_code != 200) {
       std::string body((char *) ptr, bytes_received);
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "write_cb: received body %s\n", body.c_str());
