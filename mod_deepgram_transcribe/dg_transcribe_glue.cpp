@@ -543,7 +543,7 @@ extern "C" {
 	switch_status_t dg_transcribe_session_stop(switch_core_session_t *session,int channelIsClosing, char* bugname) {
     switch_channel_t *channel = switch_core_session_get_channel(session);
     switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, bugname);
-    const bool use_single_connection = switch_true(switch_channel_get_variable(channel, "DEEPGRAM_SPEECH_USE_SINGLE_CONNECTION"));
+    const bool use_single_connection = switch_true(std::getenv("DEEPGRAM_SPEECH_USE_SINGLE_CONNECTION"));
     if (!bug) {
       switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "dg_transcribe_session_stop: no bug - websocket conection already closed\n");
       return SWITCH_STATUS_FALSE;

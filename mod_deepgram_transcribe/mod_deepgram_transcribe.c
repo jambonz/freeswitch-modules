@@ -5,6 +5,7 @@
  */
 #include "mod_deepgram_transcribe.h"
 #include "dg_transcribe_glue.h"
+#include <stdio.h>
 
 /* Prototypes */
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_deepgram_transcribe_shutdown);
@@ -72,7 +73,7 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
 	switch_codec_implementation_t read_impl = { 0 };
 	void *pUserData;
 	uint32_t samples_per_second;
-	int use_single_connection = switch_true(switch_channel_get_variable(channel, "DEEPGRAM_SPEECH_USE_SINGLE_CONNECTION"));
+	int use_single_connection = switch_true(getenv("DEEPGRAM_SPEECH_USE_SINGLE_CONNECTION"));
 	bug = switch_channel_get_private(channel, bugname);
 
 	if (bug && !use_single_connection) {
