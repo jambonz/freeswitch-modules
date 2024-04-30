@@ -588,12 +588,21 @@ extern "C" {
 
     // Keep sending keep alive if there is no transcribe activity
     if (tech_pvt->is_keep_alive && tech_pvt->pAudioPipe) {
+      deepgram::AudioPipe *pAudioPipe = static_cast<deepgram::AudioPipe *>(tech_pvt->pAudioPipe);
       if (++tech_pvt->frame_count * 20 /*ms*/ / 1000 >= DEEPGRAM_KEEP_ALIVE_INTERVAL_SECOND) {
         tech_pvt->frame_count = 0;
-        deepgram::AudioPipe *pAudioPipe = static_cast<deepgram::AudioPipe *>(tech_pvt->pAudioPipe);
         pAudioPipe->bufferForSending(keep_alive);
         switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "dg_transcribe_frame: sending %s to deepgram\n", keep_alive);
       }
+      // remove media bug buffered data
+      while (true) {
+        switch_frame_t frame = { 0 };
+        frame.data = pAudioPipe->binaryWritePtr();
+        frame.buflen = pAudioPipe->binarySpaceAvailable();
+        switch_status_t rv = switch_core_media_bug_read(bug, &frame, SWITCH_TRUE);
+        if (rv != SWITCH_STATUS_SUCCESS) break;
+      }
+      pAudioPipe->binaryWritePtrResetToZero();
       return SWITCH_TRUE;
     }
     
