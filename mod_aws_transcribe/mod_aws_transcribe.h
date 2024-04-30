@@ -28,6 +28,7 @@ struct cap_cb {
 	char sessionId[MAX_SESSION_ID+1];
   char awsAccessKeyId[128];
   char awsSecretAccessKey[128];
+	char awsSessionToken[1024];
 	uint32_t channels;
   SpeexResamplerState *resampler;
 	void* streamer;

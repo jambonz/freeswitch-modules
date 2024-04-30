@@ -173,13 +173,12 @@ public:
 		char *metadata,
 		const char* awsAccessKeyId, 
 		const char* awsSecretAccessKey,
+		const char* awsSessionToken,
 		responseHandler_t responseHandler,
 		errorHandler_t  errorHandler) : 
 	m_bot(bot), m_alias(alias), m_region(region), m_sessionId(sessionId), m_finished(false), m_finishing(false), m_packets(0),
 	m_pStream(nullptr), m_bPlayDone(false), m_bDiscardAudio(false)
 	{
-		Aws::String key(awsAccessKeyId);
-		Aws::String secret(awsSecretAccessKey);
 		Aws::String awsLocale(locale);
 		Aws::Client::ClientConfiguration config;
 		config.region = region;
@@ -190,8 +189,11 @@ public:
 		for (int i = 4; i < 20; i++) keySnippet[i] = 'x';
 		keySnippet[19] = '\0';
 
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer %p ACCESS_KEY_ID %s\n", this, keySnippet);		
-		if (*awsAccessKeyId && *awsSecretAccessKey) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer %p ACCESS_KEY_ID %s\n", this, keySnippet);
+		if (*awsAccessKeyId && *awsSecretAccessKey && *awsSessionToken) {
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "using AWS creds %s %s %s\n", awsAccessKeyId, awsSecretAccessKey, awsSessionToken);	
+			m_client = Aws::MakeUnique<LexRuntimeV2Client>(ALLOC_TAG, AWSCredentials(awsAccessKeyId, awsSecretAccessKey, awsSessionToken), config);
+		}else if (*awsAccessKeyId && *awsSecretAccessKey) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "using AWS creds %s %s\n", awsAccessKeyId, awsSecretAccessKey);	
 			m_client = Aws::MakeUnique<LexRuntimeV2Client>(ALLOC_TAG, AWSCredentials(awsAccessKeyId, awsSecretAccessKey), config);
 		}
@@ -540,7 +542,7 @@ static void *SWITCH_THREAD_FUNC lex_thread(switch_thread_t *thread, void *obj) {
 	bool ok = true;
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "lex_thread: starting cb %p\n", (void *) cb);
 	GStreamer* pStreamer = new GStreamer(cb->sessionId, cb->bot, cb->alias, cb->region, cb->locale, 
-		cb->intent, cb->metadata, cb->awsAccessKeyId, cb->awsSecretAccessKey, 
+		cb->intent, cb->metadata, cb->awsAccessKeyId, cb->awsSecretAccessKey, cb->awsSessionToken,
 		cb->responseHandler, cb->errorHandler);
 	if (!pStreamer) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "lex_thread: Error allocating streamer\n");
@@ -641,6 +643,7 @@ extern "C" {
 		memset(cb, sizeof(cb), 0);
 		const char* awsAccessKeyId = switch_channel_get_variable(channel, "AWS_ACCESS_KEY_ID");
 		const char* awsSecretAccessKey = switch_channel_get_variable(channel, "AWS_SECRET_ACCESS_KEY");
+		const char* awsSessionToken = switch_channel_get_variable(channel, "AWS_SESSION_TOKEN");
 
 		if (!hasDefaultCredentials && (!awsAccessKeyId || !awsSecretAccessKey)) {
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, 
@@ -654,6 +657,9 @@ extern "C" {
 		if (awsAccessKeyId && awsSecretAccessKey) {
 			strncpy(cb->awsAccessKeyId, awsAccessKeyId, 128);
 			strncpy(cb->awsSecretAccessKey, awsSecretAccessKey, 128);
+			if (awsSessionToken) {
+				strncpy(cb->awsSessionToken, awsSessionToken, 1024);
+			}
 		}
 		else {
 			strncpy(cb->awsAccessKeyId, std::getenv("AWS_ACCESS_KEY_ID"), 128);
