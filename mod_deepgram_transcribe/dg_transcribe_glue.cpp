@@ -596,13 +596,13 @@ extern "C" {
       }
       // remove media bug buffered data
       while (true) {
+        unsigned char data[SWITCH_RECOMMENDED_BUFFER_SIZE] = {0};
         switch_frame_t frame = { 0 };
-        frame.data = pAudioPipe->binaryWritePtr();
-        frame.buflen = pAudioPipe->binarySpaceAvailable();
+        frame.data = data;
+        frame.buflen = SWITCH_RECOMMENDED_BUFFER_SIZE;
         switch_status_t rv = switch_core_media_bug_read(bug, &frame, SWITCH_TRUE);
         if (rv != SWITCH_STATUS_SUCCESS) break;
       }
-      pAudioPipe->binaryWritePtrResetToZero();
       return SWITCH_TRUE;
     }
     
