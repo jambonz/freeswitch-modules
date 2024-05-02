@@ -657,9 +657,7 @@ extern "C" {
 		if (awsAccessKeyId && awsSecretAccessKey) {
 			strncpy(cb->awsAccessKeyId, awsAccessKeyId, 128);
 			strncpy(cb->awsSecretAccessKey, awsSecretAccessKey, 128);
-			if (awsSessionToken) {
-				strncpy(cb->awsSessionToken, awsSessionToken, 1024);
-			}
+			if (awsSessionToken) strncpy(cb->awsSessionToken, awsSessionToken, 1024);
 		}
 		else {
 			strncpy(cb->awsAccessKeyId, std::getenv("AWS_ACCESS_KEY_ID"), 128);

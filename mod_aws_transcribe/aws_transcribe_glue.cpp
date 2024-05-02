@@ -421,13 +421,12 @@ extern "C" {
 		strncpy(cb->sessionId, switch_core_session_get_uuid(session), MAX_SESSION_ID);
 		strncpy(cb->bugname, bugname, MAX_BUG_LEN);
 
-		if (awsAccessKeyId && awsSecretAccessKey && awsRegion) {
+    if (awsRegion) strncpy(cb->region, awsRegion, MAX_REGION);
+		if (awsAccessKeyId && awsSecretAccessKey) {
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Using channel vars for aws authentication\n");
 			strncpy(cb->awsAccessKeyId, awsAccessKeyId, 128);
 			strncpy(cb->awsSecretAccessKey, awsSecretAccessKey, 128);
-			strncpy(cb->awsSessionToken, awsSessionToken, 1024);
-			strncpy(cb->region, awsRegion, MAX_REGION);
-
+			if (awsSessionToken) strncpy(cb->awsSessionToken, awsSessionToken, 1024);
 		}
 		else if (std::getenv("AWS_ACCESS_KEY_ID") &&
 			std::getenv("AWS_SECRET_ACCESS_KEY") &&
