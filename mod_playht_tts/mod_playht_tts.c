@@ -99,6 +99,8 @@ static switch_status_t p_speech_feed_tts(switch_speech_handle_t *sh, char *text,
   playht_t *p = createOrRetrievePrivateData(sh);
   p->draining = 0;
   p->reads = 0;
+  p->response_code = 0;
+  p->err_msg = NULL;
 
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "p_speech_feed_tts\n");
 

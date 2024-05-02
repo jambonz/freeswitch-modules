@@ -82,6 +82,8 @@ static switch_status_t a_speech_feed_tts(switch_speech_handle_t *sh, char *text,
   a->draining = 0;
   a->reads = 0;
   a->flushed = 0;
+  a->response_code = 0;
+  a->err_msg = NULL;
 
   return azure_speech_feed_tts(a, text, flags);
 }
