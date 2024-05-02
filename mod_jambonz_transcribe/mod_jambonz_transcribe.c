@@ -100,7 +100,7 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
 		return status;
 	}
   switch_channel_set_private(channel, bugname, bug);
-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "added media bug for jb transcribe\n");
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "added media bug for jb transcribe: %s\n", bugname);
 
 	return SWITCH_STATUS_SUCCESS;
 }
@@ -146,7 +146,7 @@ SWITCH_STANDARD_API(jb_transcribe_function)
 		if ((lsession = switch_core_session_locate(argv[0]))) {
 			if (!strcasecmp(argv[1], "stop")) {
 				char *bugname = argc > 2 ? argv[2] : MY_BUG_NAME;
-    		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "stop transcribing\n");
+        switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "stop transcribing %s\n", bugname);
 				status = do_stop(lsession, bugname);
 			} else if (!strcasecmp(argv[1], "start")) {
         char* lang = argv[2];
