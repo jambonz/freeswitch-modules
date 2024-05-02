@@ -193,7 +193,7 @@ public:
 		if (*awsAccessKeyId && *awsSecretAccessKey && *awsSessionToken) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "using AWS creds %s %s %s\n", awsAccessKeyId, awsSecretAccessKey, awsSessionToken);	
 			m_client = Aws::MakeUnique<LexRuntimeV2Client>(ALLOC_TAG, AWSCredentials(awsAccessKeyId, awsSecretAccessKey, awsSessionToken), config);
-		}else if (*awsAccessKeyId && *awsSecretAccessKey) {
+		} else if (*awsAccessKeyId && *awsSecretAccessKey) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "using AWS creds %s %s\n", awsAccessKeyId, awsSecretAccessKey);	
 			m_client = Aws::MakeUnique<LexRuntimeV2Client>(ALLOC_TAG, AWSCredentials(awsAccessKeyId, awsSecretAccessKey), config);
 		}
