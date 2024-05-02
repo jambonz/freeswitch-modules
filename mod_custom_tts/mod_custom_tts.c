@@ -78,6 +78,8 @@ static switch_status_t w_speech_feed_tts(switch_speech_handle_t *sh, char *text,
   custom_t *c = createOrRetrievePrivateData(sh);
   c->draining = 0;
   c->reads = 0;
+  c->response_code = 0;
+  c->err_msg = NULL;
 
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "w_speech_feed_tts\n");
 
