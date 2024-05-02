@@ -106,6 +106,8 @@ static switch_status_t ell_speech_feed_tts(switch_speech_handle_t *sh, char *tex
   elevenlabs_t *el = createOrRetrievePrivateData(sh);
   el->draining = 0;
   el->reads = 0;
+  el->response_code = 0;
+  el->err_msg = NULL;
   
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "ell_speech_feed_tts\n");
   
