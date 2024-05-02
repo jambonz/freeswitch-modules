@@ -49,12 +49,11 @@ public:
 		const char* region, 
 		const char* awsAccessKeyId, 
 		const char* awsSecretAccessKey,
+		const char* awsSessionToken,
 		responseHandler_t responseHandler
   ) : m_sessionId(sessionId), m_bugname(bugname), m_finished(false), m_interim(interim), m_finishing(false), m_connected(false), m_connecting(false),
 	 		m_packets(0), m_responseHandler(responseHandler), m_pStream(nullptr), 
 			m_audioBuffer(320 * (samples_per_second == 8000 ? 1 : 2), 15) {
-		Aws::String key(awsAccessKeyId);
-		Aws::String secret(awsSecretAccessKey);
 		Aws::Client::ClientConfiguration config;
 		if (region != nullptr && strlen(region) > 0) config.region = region;
 		char keySnippet[20];
@@ -63,8 +62,10 @@ public:
 		for (int i = 4; i < 20; i++) keySnippet[i] = 'x';
 		keySnippet[19] = '\0';
 
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer %p ACCESS_KEY_ID %s, region %s\n", this, keySnippet, region);		
-		if (*awsAccessKeyId && *awsSecretAccessKey) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer %p ACCESS_KEY_ID %s, region %s\n", this, keySnippet, region);
+		if (*awsAccessKeyId && *awsSecretAccessKey && *awsSessionToken) {
+			m_client = Aws::MakeUnique<TranscribeStreamingServiceClient>(ALLOC_TAG, AWSCredentials(awsAccessKeyId, awsSecretAccessKey, awsSessionToken), config);
+		} else if (*awsAccessKeyId && *awsSecretAccessKey) {
 			m_client = Aws::MakeUnique<TranscribeStreamingServiceClient>(ALLOC_TAG, AWSCredentials(awsAccessKeyId, awsSecretAccessKey), config);
 		}
 		else {
@@ -320,8 +321,8 @@ static void *SWITCH_THREAD_FUNC aws_transcribe_thread(switch_thread_t *thread, v
 	struct cap_cb *cb = (struct cap_cb *) obj;
 	bool ok = true;
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "transcribe_thread: starting cb %p\n", (void *) cb);
-	GStreamer* pStreamer = new GStreamer(cb->sessionId, cb->bugname, cb->channels, cb->lang, cb->interim, cb->samples_per_second, cb->region, cb->awsAccessKeyId, cb->awsSecretAccessKey, 
-		cb->responseHandler);
+	GStreamer* pStreamer = new GStreamer(cb->sessionId, cb->bugname, cb->channels, cb->lang, cb->interim, cb->samples_per_second,
+		cb->region, cb->awsAccessKeyId, cb->awsSecretAccessKey, cb->awsSessionToken, cb->responseHandler);
 	if (!pStreamer) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "transcribe_thread: Error allocating streamer\n");
 		return nullptr;
@@ -408,6 +409,7 @@ extern "C" {
 		memset(cb, sizeof(cb), 0);
 		const char* awsAccessKeyId = switch_channel_get_variable(channel, "AWS_ACCESS_KEY_ID");
 		const char* awsSecretAccessKey = switch_channel_get_variable(channel, "AWS_SECRET_ACCESS_KEY");
+		const char* awsSessionToken = switch_channel_get_variable(channel, "AWS_SESSION_TOKEN");
 		const char* awsRegion = switch_channel_get_variable(channel, "AWS_REGION");
 		cb->channels = channels;
 		LanguageCode code = LanguageCodeMapper::GetLanguageCodeForName(lang);
@@ -419,12 +421,12 @@ extern "C" {
 		strncpy(cb->sessionId, switch_core_session_get_uuid(session), MAX_SESSION_ID);
 		strncpy(cb->bugname, bugname, MAX_BUG_LEN);
 
-		if (awsAccessKeyId && awsSecretAccessKey && awsRegion) {
+    if (awsRegion) strncpy(cb->region, awsRegion, MAX_REGION);
+		if (awsAccessKeyId && awsSecretAccessKey) {
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Using channel vars for aws authentication\n");
 			strncpy(cb->awsAccessKeyId, awsAccessKeyId, 128);
 			strncpy(cb->awsSecretAccessKey, awsSecretAccessKey, 128);
-			strncpy(cb->region, awsRegion, MAX_REGION);
-
+			if (awsSessionToken) strncpy(cb->awsSessionToken, awsSessionToken, 1024);
 		}
 		else if (std::getenv("AWS_ACCESS_KEY_ID") &&
 			std::getenv("AWS_SECRET_ACCESS_KEY") &&
