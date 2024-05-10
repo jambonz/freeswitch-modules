@@ -380,9 +380,16 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
 	struct cap_cb *cb = (struct cap_cb *) obj;
 	GStreamer* streamer = (GStreamer *) cb->streamer;
 
+  std::thread::id this_id = std::this_thread::get_id();
+  std::stringstream ss;
+  ss << this_id;
+  std::string id_str = ss.str();
+
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "grpc_read_thread %s starting\n", id_str.c_str()) ;
+
   bool connected = streamer->waitForConnect();
   if (!connected) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "google transcribe grpc read thread exiting since we didnt connect\n") ;
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "grpc_read_thread %s thread exiting since we didnt connect\n", id_str.c_str()) ;
     return nullptr;
   }
 
@@ -391,14 +398,14 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
   while (streamer->read(&response)) {  // Returns false when no more to read.
     switch_core_session_t* session = switch_core_session_locate(cb->sessionId);
     if (!session) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "grpc_read_thread: session %s is gone!\n", cb->sessionId) ;
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "grpc_read_thread: %s session %s is gone!\n", id_str.c_str(), cb->sessionId) ;
       return nullptr;
     }
     count++;
     auto speech_event_type = response.speech_event_type();
     if (response.has_error()) {
       Status status = response.error();
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "grpc_read_thread: error %s (%d)\n", status.message().c_str(), status.code()) ;
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "grpc_read_thread: %s error %s (%d)\n", id_str.c_str(), status.message().c_str(), status.code()) ;
       cJSON* json = cJSON_CreateObject();
       cJSON_AddStringToObject(json, "type", "error");
       cJSON_AddStringToObject(json, "error", status.message().c_str());
@@ -444,7 +451,7 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
 
         if (alternative.words_size() > 0) {
           cJSON * jWords = cJSON_CreateArray();
-          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "grpc_read_thread: %d words\n", alternative.words_size()) ;
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "grpc_read_thread: %s %d words\n", id_str.c_str(), alternative.words_size()) ;
           for (int b = 0; b < alternative.words_size(); b++) {
             auto words = alternative.words(b);
             cJSON* jWord = cJSON_CreateObject();
@@ -480,16 +487,16 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
 
     if (speech_event_type == StreamingRecognizeResponse_SpeechEventType_END_OF_SINGLE_UTTERANCE) {
       // we only get this when we have requested it, and recognition stops after we get this
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "grpc_read_thread: got end_of_utterance\n") ;
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "grpc_read_thread: %s got end_of_utterance\n", id_str.c_str()) ;
       cb->got_end_of_utterance = 1;
       cb->responseHandler(session, "end_of_utterance", cb->bugname);
       if (cb->wants_single_utterance) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "grpc_read_thread: sending writesDone because we want only a single utterance\n") ;
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "grpc_read_thread: %s sending writesDone because we want only a single utterance\n", id_str.c_str()) ;
         streamer->writesDone();
       }
     }
     switch_core_session_rwunlock(session);
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "grpc_read_thread: got %d responses\n", response.results_size());
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "grpc_read_thread: %s got %d responses\n", response.results_size(), id_str.c_str());
   }
 
   {
@@ -504,10 +511,11 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
           cb->responseHandler(session, "no_audio", cb->bugname);
         }
       }
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "grpc_read_thread: finish() status %s (%d)\n", status.error_message().c_str(), status.error_code()) ;
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "grpc_read_thread: %s finish() status %s (%d)\n", id_str.c_str(), status.error_message().c_str(), status.error_code()) ;
       switch_core_session_rwunlock(session);
     }
   }
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "grpc_read_thread %s exiting\n", id_str.c_str()) ;
   return nullptr;
 }
 
@@ -605,6 +613,9 @@ extern "C" {
 
       if (!cb->vad) streamer->connect();
 
+      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "%s: creating new read thread, streamer %p\n", 
+        switch_channel_get_name(channel), (void*)streamer);
+
       // create the read thread
       switch_threadattr_t *thd_attr = NULL;
       switch_memory_pool_t *pool = switch_core_session_get_pool(session);
@@ -620,17 +631,23 @@ extern "C" {
     switch_status_t google_speech_session_cleanup(switch_core_session_t *session, int channelIsClosing, switch_media_bug_t *bug) {
       switch_channel_t *channel = switch_core_session_get_channel(session);
 
+      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "%s: cleaning up bug %p\n", 
+        switch_channel_get_name(channel), (void*)bug);
+
       if (bug) {
         struct cap_cb *cb = (struct cap_cb *) switch_core_media_bug_get_user_data(bug);
         switch_mutex_lock(cb->mutex);
 
         if (!switch_channel_get_private(channel, cb->bugname)) {
           // race condition
-          switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "%s Bug is not attached (race).\n", switch_channel_get_name(channel));
+          switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "%s Bug %p is not attached (race).\n", 
+            switch_channel_get_name(channel), (void *)bug);
           switch_mutex_unlock(cb->mutex);
           return SWITCH_STATUS_FALSE;
         }
         switch_channel_set_private(channel, cb->bugname, NULL);
+        switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "%s set_private set bug to NULL, was %p\n", 
+          switch_channel_get_name(channel), (void *)bug);
 
       // stop playback if available
        if (cb->play_file == 1){ 

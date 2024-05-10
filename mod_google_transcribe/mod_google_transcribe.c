@@ -104,10 +104,10 @@ static switch_bool_t capture_callback(switch_media_bug_t *bug, void *user_data, 
 
 	case SWITCH_ABC_TYPE_CLOSE:
 		{
-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Got SWITCH_ABC_TYPE_CLOSE, calling google_speech_session_cleanup.\n");
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Got SWITCH_ABC_TYPE_CLOSE, calling google_speech_session_cleanup bug %p.\n", (void *)bug;
 			responseHandler(session, "end_of_transcript", cb->bugname);
 			google_speech_session_cleanup(session, 1, bug);
-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Finished SWITCH_ABC_TYPE_CLOSE.\n");
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Finished SWITCH_ABC_TYPE_CLOSE with bug %p.\n", (void *)bug);
 		}
 		break;
 	
@@ -143,9 +143,9 @@ static switch_status_t do_stop(switch_core_session_t *session, char *bugname)
 	switch_media_bug_t *bug = switch_channel_get_private(channel, bugname);
 
 	if (bug) {
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Received user command command, calling google_speech_session_cleanup (possibly to stop prev transcribe)\n");
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Received user command command, calling google_speech_session_cleanup bug %p\n", (void *)bug);
 		status = google_speech_session_cleanup(session, 0, bug);
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "stopped transcription.\n");
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "stopped transcription via bug %p.\n", (void *)bug);
 	}
 
 	return status;
@@ -210,9 +210,10 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
   const char* model = NULL;
 	const char* var;
 
-	if (switch_channel_get_private(channel, bugname)) {
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "removing bug from previous transcribe\n");
+	if ((bug = switch_channel_get_private(channel, bugname))) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "removing bug %p from previous transcribe\n", (void *)bug);
 		do_stop(session, bugname);
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "previous bug %p removed, now we can add a new bug\n", (void *)bug);
 	}
 
 	if (switch_true(switch_channel_get_variable(channel, "GOOGLE_SPEECH_SINGLE_UTTERANCE"))) {
@@ -276,8 +277,12 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
 	if ((status = switch_core_media_bug_add(session, bugname, NULL, capture_callback, pUserData, 0, flags, &bug)) != SWITCH_STATUS_SUCCESS) {
 		return status;
 	}
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "added bug %p\n", (void *)bug);
 
+  //Q: we don't have a lock, so is it possible after creating and before calling set_private
+  // another thread could call do_stop and find no bug to remove?
 	switch_channel_set_private(channel, bugname, bug);
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "called set_private to associate bug %p with channel\n", (void *)bug);
 
 	return SWITCH_STATUS_SUCCESS;
 }
