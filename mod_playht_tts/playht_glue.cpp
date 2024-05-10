@@ -76,7 +76,8 @@ static CURL* createEasyHandle(void) {
 
   // set connect timeout to 3 seconds and total timeout to 109 seconds
   curl_easy_setopt(easy, CURLOPT_CONNECTTIMEOUT_MS, 3000L);
-  curl_easy_setopt(easy, CURLOPT_TIMEOUT, 10L);
+  //For long text, PlayHT took more than 20 seconds to complete the download.
+  curl_easy_setopt(easy, CURLOPT_TIMEOUT, 60L);
 
   return easy ;    
 }
