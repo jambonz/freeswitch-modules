@@ -162,14 +162,14 @@ namespace {
     if (!model && !customModel) {
       std::string defaultModel;
       if (getLanguageInfo(language, defaultModel)) {
-        oss << "&model=" << defaultModel;
+        oss << "model=" << defaultModel;
       }
       else {
         oss << "model=base"; // most widely supported, though not ideal
       }
     }
-    else if (model) oss << "&model=" << model;
-    else if (customModel) oss << "&model=" << customModel;
+    else if (model) oss << "model=" << model;
+    else if (customModel) oss << "model=" << customModel;
 
     if (var = switch_channel_get_variable(channel, "DEEPGRAM_SPEECH_MODEL_VERSION")) {
      oss <<  "&version";
