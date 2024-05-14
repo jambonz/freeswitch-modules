@@ -199,6 +199,9 @@ extern "C" {
 
           total_bytes_to_process = bytes_received + 1;
         } else {
+          // Allocate memory for the new data array
+          combinedData.reset(new uint8_t[bytes_received]);
+          memcpy(combinedData.get(), audioData->data(), bytes_received);
           total_bytes_to_process = bytes_received;
         }
 
