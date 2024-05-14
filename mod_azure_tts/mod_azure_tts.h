@@ -32,6 +32,9 @@ typedef struct azure_data {
   SpeexResamplerState *resampler;
   void *circularBuffer;
   switch_mutex_t *mutex;
+
+  int has_last_byte;
+  uint8_t last_byte;
 } azure_t;
 
 #endif

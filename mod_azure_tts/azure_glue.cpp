@@ -179,23 +179,55 @@ extern "C" {
         if (a->flushed) return;
         bool fireEvent = false;
         CircularBuffer_t *cBuffer = (CircularBuffer_t *) a->circularBuffer;
+         size_t total_bytes_to_process;
 
         auto audioData = e.Result->GetAudioData();
+        auto bytes_received = audioData->size();
+        // Buffer to hold combined data if there is unprocessed byte from the last call.
+        std::unique_ptr<uint8_t[]> combinedData;
+        if (a->has_last_byte) {
+          a->has_last_byte = false;  // We'll handle the last_byte now, so toggle the flag off
+
+          // Allocate memory for the new data array
+          combinedData.reset(new uint8_t[bytes_received + 1]);
+
+          // Prepend the last byte from previous call
+          combinedData[0] = a->last_byte;
+
+          // Copy the new data following the prepended byte
+          memcpy(combinedData.get() + 1, audioData->data(), bytes_received);
+
+          total_bytes_to_process = bytes_received + 1;
+        } else {
+          // Allocate memory for the new data array
+          combinedData.reset(new uint8_t[bytes_received]);
+          memcpy(combinedData.get(), audioData->data(), bytes_received);
+          total_bytes_to_process = bytes_received;
+        }
+
+        // If we now have an odd total, save the last byte for next time
+        auto data = combinedData.get();
+        if ((total_bytes_to_process % sizeof(int16_t)) != 0) {
+          a->last_byte = data[total_bytes_to_process - 1];
+          a->has_last_byte = true;
+          total_bytes_to_process--;
+        }
+  
         if (a->file) {
-          fwrite(audioData->data(), 1, audioData->size(), a->file);
+          fwrite(data, 1, total_bytes_to_process, a->file);
         }
 
         /**
          * this sort of reinterpretation can be dangerous as a general rule, but in this case we know that the data
          * is 16-bit PCM, so it's safe to do this and its much faster than copying the data byte by byte
          */
-        const uint16_t* begin = reinterpret_cast<const uint16_t*>(audioData->data());
-        const uint16_t* end = reinterpret_cast<const uint16_t*>(audioData->data() + audioData->size());
+        const uint16_t* begin = reinterpret_cast<const uint16_t*>(data);
+        const uint16_t* end = reinterpret_cast<const uint16_t*>(data + total_bytes_to_process);
 
         /* lock as briefly as possible */
         switch_mutex_lock(a->mutex);
-        if (cBuffer->capacity() - cBuffer->size() < audioData->size()) {
-          cBuffer->set_capacity(cBuffer->size() + std::max( audioData->size(), (size_t)BUFFER_SIZE));
+        if (cBuffer->capacity() - cBuffer->size() < total_bytes_to_process) {
+          cBuffer->set_capacity(cBuffer->size() + std::max( total_bytes_to_process, (size_t)BUFFER_SIZE));
         }
         cBuffer->insert(cBuffer->end(), begin, end);
         switch_mutex_unlock(a->mutex);
