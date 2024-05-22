@@ -357,18 +357,13 @@ extern "C" {
   }
 
   switch_status_t verbio_speech_session_cleanup(switch_core_session_t *session, int channelIsClosing, switch_media_bug_t *bug) {
+    
     switch_channel_t *channel = switch_core_session_get_channel(session);
 
     if (bug) {
       struct cap_cb *cb = (struct cap_cb *) switch_core_media_bug_get_user_data(bug);
       switch_mutex_lock(cb->mutex);
 
-      if (!switch_channel_get_private(channel, cb->bugname)) {
-        // race condition
-        switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "%s Bug is not attached (race).\n", switch_channel_get_name(channel));
-        switch_mutex_unlock(cb->mutex);
-        return SWITCH_STATUS_FALSE;
-      }
       switch_channel_set_private(channel, cb->bugname, NULL);
 
       // close connection and get final responses
@@ -398,7 +393,8 @@ extern "C" {
       switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "verbio_speech_session_cleanup: Closed stream\n");
 
       switch_mutex_unlock(cb->mutex);
-
+      switch_mutex_destroy(cb->mutex);
+      cb->mutex = nullptr;
 
       return SWITCH_STATUS_SUCCESS;
     }
