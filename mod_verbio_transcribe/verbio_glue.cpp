@@ -356,10 +356,9 @@ extern "C" {
     return SWITCH_STATUS_SUCCESS;
   }
 
-  switch_status_t verbio_speech_session_cleanup(switch_core_session_t *session, int channelIsClosing, switch_media_bug_t *bug) {
-    
+  switch_status_t verbio_speech_session_cleanup(switch_core_session_t *session, int channelIsClosing, char* bugname) {
     switch_channel_t *channel = switch_core_session_get_channel(session);
-
+    switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, bugname);
     if (bug) {
       struct cap_cb *cb = (struct cap_cb *) switch_core_media_bug_get_user_data(bug);
       switch_mutex_lock(cb->mutex);
