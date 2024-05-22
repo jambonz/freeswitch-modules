@@ -44,7 +44,7 @@ static switch_bool_t capture_callback(switch_media_bug_t *bug, void *user_data, 
       struct cap_cb* cb = (struct cap_cb*) switch_core_media_bug_get_user_data(bug);
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Got SWITCH_ABC_TYPE_CLOSE.\n");
 
-      verbio_transcribe_session_stop(session, 1, cb->bugname);
+      verbio_speech_session_cleanup(session, 1, cb->bugname);
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Finished SWITCH_ABC_TYPE_CLOSE.\n");
     }
     break;
@@ -78,7 +78,7 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
     return SWITCH_STATUS_FALSE;
   }
 
-  if (SWITCH_STATUS_FALSE == verbio_transcribe_session_init(session, responseHandler, 
+  if (SWITCH_STATUS_FALSE == verbio_speech_session_init(session, responseHandler, 
     flags & SMBF_STEREO ? 2 : 1/*channels*/,bugname, &pUserData)) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error initializing verbio speech session.\n");
     return SWITCH_STATUS_FALSE;
@@ -101,7 +101,7 @@ static switch_status_t do_stop(switch_core_session_t *session, char* bugname)
 
   if (bug) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "do_stop: Received user command command to stop transcribe.\n");
-    status = verbio_transcribe_session_stop(session, 0, bugname);
+    status = verbio_speech_session_cleanup(session, 0, bugname);
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "do_stop: stopped transcribe.\n");
   }
 
@@ -173,7 +173,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_verbio_transcribe_load)
 
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "verbio Speech Transcription API loading..\n");
 
-  if (SWITCH_STATUS_FALSE == verbio_transcribe_init()) {
+  if (SWITCH_STATUS_FALSE == verbio_speech_init()) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CRIT, "Failed initializing verbio speech interface\n");
   }
 
@@ -192,7 +192,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_verbio_transcribe_load)
   Macro expands to: switch_status_t mod_verbio_transcribe_shutdown() */
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_verbio_transcribe_shutdown)
 {
-  verbio_transcribe_cleanup();
+  verbio_speech_cleanup();
   switch_event_free_subclass(TRANSCRIBE_EVENT_RESULTS);
   return SWITCH_STATUS_SUCCESS;
 }
