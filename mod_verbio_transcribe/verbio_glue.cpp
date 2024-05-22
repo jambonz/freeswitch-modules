@@ -255,7 +255,7 @@ extern "C" {
     return SWITCH_STATUS_SUCCESS;
   }
   switch_status_t verbio_speech_session_init(switch_core_session_t *session, responseHandler_t responseHandler, 
-    uint32_t channels, int interim, char *bugname, void **ppUserData) {
+    uint32_t channels, char* lang, int interim, char* bugname, void **ppUserData) {
 
     switch_channel_t *channel = switch_core_session_get_channel(session);
     switch_memory_pool_t *pool = switch_core_session_get_pool(session);
@@ -287,11 +287,9 @@ extern "C" {
     }
     cb->enable_formatting = switch_true(switch_channel_get_variable(channel, "VERBIO_ENABLE_FORMATTING"));
     cb->enable_diarization = switch_true(switch_channel_get_variable(channel, "VERBIO_ENABLE_DIARIZATION"));
+    strncpy(cb->language, lang, MAX_LANGUAGE_LEN);
     if (var = switch_channel_get_variable(channel, "VERBIO_ENGINE_VERSION")) {
       cb->engine_version = atoi(var);
-    }
-    if (var = switch_channel_get_variable(channel, "VERBIO_LANGUAGE")) {
-      strncpy(cb->language, var, MAX_LANGUAGE_LEN);
     }
     if (var = switch_channel_get_variable(channel, "VERBIO_TOPIC")) {
       cb->topic = atoi(var);
@@ -317,8 +315,10 @@ extern "C" {
       cb->speech_incomplete_timeout = atoi(var);
     }
 
-    
-    switch_mutex_init(&cb->mutex, SWITCH_MUTEX_NESTED, pool);
+    if (switch_mutex_init(&cb->mutex, SWITCH_MUTEX_NESTED, pool) != SWITCH_STATUS_SUCCESS) {
+      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Error initializing mutex\n");
+      return SWITCH_STATUS_FALSE;
+    }
 
     if (sampleRate != 8000) {
         switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "verbio_speech_session_init:  initializing resampler\n");

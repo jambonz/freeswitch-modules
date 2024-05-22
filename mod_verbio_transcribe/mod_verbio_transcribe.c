@@ -50,7 +50,6 @@ static switch_bool_t capture_callback(switch_media_bug_t *bug, void *user_data, 
     break;
   
   case SWITCH_ABC_TYPE_READ:
-
     return verbio_speech_frame(bug, user_data);
     break;
 
@@ -62,7 +61,7 @@ static switch_bool_t capture_callback(switch_media_bug_t *bug, void *user_data, 
   return SWITCH_TRUE;
 }
 
-static switch_status_t start_capture(switch_core_session_t *session, switch_media_bug_flag_t flags, char* bugname)
+static switch_status_t start_capture(switch_core_session_t *session, switch_media_bug_flag_t flags, char* lang, int interim, char* bugname)
 {
   switch_channel_t *channel = switch_core_session_get_channel(session);
   switch_media_bug_t *bug;
@@ -79,7 +78,7 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
   }
 
   if (SWITCH_STATUS_FALSE == verbio_speech_session_init(session, responseHandler, 
-    flags & SMBF_STEREO ? 2 : 1/*channels*/,bugname, &pUserData)) {
+    flags & SMBF_STEREO ? 2 : 1/*channels*/,lang, interim, bugname, &pUserData)) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error initializing verbio speech session.\n");
     return SWITCH_STATUS_FALSE;
   }
@@ -108,10 +107,10 @@ static switch_status_t do_stop(switch_core_session_t *session, char* bugname)
   return status;
 }
 
-#define TRANSCRIBE_API_SYNTAX "<uuid> [start|stop] [stereo|mono] [bugname]"
+#define TRANSCRIBE_API_SYNTAX "<uuid> [start|stop] lang-code [interim] [stereo|mono] [bugname]"
 SWITCH_STANDARD_API(verbio_transcribe_function)
 {
-  char *mycmd = NULL, *argv[4] = { 0 };
+  char *mycmd = NULL, *argv[6] = { 0 };
   int argc = 0;
   switch_status_t status = SWITCH_STATUS_FALSE;
   switch_media_bug_flag_t flags = SMBF_READ_STREAM /* | SMBF_WRITE_STREAM | SMBF_READ_PING */;
@@ -119,6 +118,7 @@ SWITCH_STANDARD_API(verbio_transcribe_function)
   if (!zstr(cmd) && (mycmd = strdup(cmd))) {
     argc = switch_separate_string(mycmd, ' ', argv, (sizeof(argv) / sizeof(argv[0])));
   }
+
 
   if (zstr(cmd) || zstr(argv[0])) {
     switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Error with command %s %s %s.\n", cmd, argv[0], argv[1]);
@@ -133,13 +133,16 @@ SWITCH_STANDARD_API(verbio_transcribe_function)
         switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "Verbio stop transcribing %s\n", bugname);
         status = do_stop(lsession, bugname);
       } else if (!strcasecmp(argv[1], "start")) {
-        char *bugname = argc > 3  ? argv[3] : MY_BUG_NAME;
-        if (argc > 2 && !strcmp(argv[2], "stereo")) {
+        char* lang = argv[2];
+        int interim = argc > 3 && !strcmp(argv[3], "interim");
+				char *bugname = argc > 5 ? argv[5] : MY_BUG_NAME;
+				if (argc > 4 && !strcmp(argv[4], "stereo")) {
           flags |= SMBF_WRITE_STREAM ;
           flags |= SMBF_STEREO;
-        }
-        switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "Verbio start transcribing %s\n", bugname);
-        status = start_capture(lsession, flags, bugname);
+				}
+    		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "start transcribing %s %s %s\n", 
+          lang, interim ? "interim": "complete", bugname);
+        status = start_capture(lsession, flags, lang, interim, bugname);
       }
       switch_core_session_rwunlock(lsession);
     }
