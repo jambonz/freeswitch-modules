@@ -403,8 +403,8 @@ extern "C" {
         }
         jambonz::AudioPipe *pAudioPipe = static_cast<jambonz::AudioPipe *>(tech_pvt->pAudioPipe);
         if (pAudioPipe) reaper(tech_pvt);
-        destroy_tech_pvt(tech_pvt);
         switch_mutex_unlock(tech_pvt->mutex);
+        destroy_tech_pvt(tech_pvt);
         switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "(%u) jb_transcribe_session_stop, bug removed\n", id);
         return SWITCH_STATUS_SUCCESS;
       }
