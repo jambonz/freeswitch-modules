@@ -422,7 +422,7 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
   int16_t* inputData = reinterpret_cast<int16_t*>(data);
   if (0 == v->reads++) {
     fireEvent = true;
-    // Deepgram return PCM linear16 WAV file which contains 44 bytes headers, remove that.
+    // Verbio return PCM linear16 WAV file which contains 44 bytes headers, remove that.
     inputData += 22;
     total_bytes_to_process -= 44;
   }
