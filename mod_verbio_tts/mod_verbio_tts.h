@@ -25,6 +25,7 @@ typedef struct verbio_data {
   FILE *file;
   SpeexResamplerState *resampler;
   void *circularBuffer;
+  void *streamer;
   switch_mutex_t *mutex;
 } verbio_t;
 

@@ -35,20 +35,19 @@ public:
     m_audioBuffer(CHUNKSIZE, 15) {
 
     strncpy(m_sessionId, cb->sessionId, 256);
-    std::shared_ptr<grpc::Channel> grpcChannel ;
     auto channelCreds = grpc::SslCredentials(grpc::SslCredentialsOptions());
-    grpcChannel = grpc::CreateChannel(
+    m_channel = grpc::CreateChannel(
                     "us.speechcenter.verbio.com",
                     grpc::CompositeChannelCredentials(
                     grpc::SslCredentials(grpc::SslCredentialsOptions()),
                     grpc::AccessTokenCredentials(cb->access_token)));
 
-    if (!grpcChannel) {
+    if (!m_channel) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "GStreamer %p failed creating grpc channel\n", this);  
       throw std::runtime_error(std::string("Error creating grpc channel"));
     }
 
-    m_stub = std::move(verbio_asr::Recognizer::NewStub(grpcChannel));
+    m_stub = std::move(verbio_asr::Recognizer::NewStub(m_channel));
 
     auto* config = m_request.mutable_config();
     // RecognitionParameters
@@ -89,7 +88,6 @@ public:
   }
 
   ~GStreamer() {
-    //switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(m_session), SWITCH_LOG_INFO, "GStreamer::~GStreamer - deleting channel and stub: %p\n", (void*)this);
   }
 
   void connect() {

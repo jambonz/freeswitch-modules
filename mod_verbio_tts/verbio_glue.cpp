@@ -13,91 +13,110 @@
 #define BUFFER_SIZE 8129
 
 using tts_grpc_gateway::v1::TextToSpeech;
-using tts_grpc_gateway::v1::SynthesisRequest;
-using tts_grpc_gateway::v1::SynthesisResponse;
+using tts_grpc_gateway::v1::StreamingSynthesisRequest;
+using tts_grpc_gateway::v1::StreamingSynthesisResponse;
 using tts_grpc_gateway::v1::VoiceSamplingRate;
 using tts_grpc_gateway::v1::AudioFormat;
+using tts_grpc_gateway::v1::EndOfUtterance;
 
 typedef boost::circular_buffer<uint16_t> CircularBuffer_t;
 
 static std::string fullDirPath;
 
-static void start_synthesis( const char* text, verbio_t* v) {
-  std::shared_ptr<grpc::Channel> grpcChannel = grpc::CreateChannel("us.speechcenter.verbio.com", grpc::InsecureChannelCredentials());
-  if (!grpcChannel) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Verbio failed creating grpc channel\n");	
-    throw std::runtime_error(std::string("Error creating Verbio grpc channel"));
-  }
-  grpc::ClientContext context;
-  context.AddMetadata("authorization", "Bearer" + std::string(v->access_token));
-  if (grpcChannel->WaitForConnected(std::chrono::system_clock::now() + std::chrono::seconds(5))) {
-    auto stub = TextToSpeech::NewStub(grpcChannel);
-    SynthesisRequest request;
-    SynthesisResponse response;
+class GStreamer {
+  public:
 
-    request.set_text(text);
-    request.set_voice(v->voice_name);
-    request.set_sampling_rate(VoiceSamplingRate::VOICE_SAMPLING_RATE_8KHZ);
-    request.set_format(AudioFormat::AUDIO_FORMAT_RAW_LPCM_S16LE);
-    auto status = stub->SynthesizeSpeech(&context, request, &response);
-    if (!status.ok()) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "mod_verbio_tts:start_synthesis failed: %s", status.error_message().c_str());
+  GStreamer(verbio_t* v) {
+    auto channelCreds = grpc::SslCredentials(grpc::SslCredentialsOptions());
+    m_channel = grpc::CreateChannel(
+                  "us.speechcenter.verbio.com",
+                  grpc::CompositeChannelCredentials(
+                  grpc::SslCredentials(grpc::SslCredentialsOptions()),
+                  grpc::AccessTokenCredentials(v->access_token)));
+    if (!m_channel) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Verbio failed creating grpc channel\n");	
+      throw std::runtime_error(std::string("Error creating Verbio grpc channel"));
+    }
+    m_stub = std::move(TextToSpeech::NewStub(m_channel));
+    grpc::ClientContext context;
+    m_streamer = m_stub->StreamingSynthesizeSpeech(&context);
+    auto* config = m_request.mutable_config();
+    config->set_voice(v->voice_name);
+    config->set_sampling_rate(VoiceSamplingRate::VOICE_SAMPLING_RATE_8KHZ);
+
+    // Send synthesis config
+    m_streamer->Write(m_request);
+    m_request.clear_config();
+  }
+
+  ~GStreamer() {
+
+  }
+
+  bool synthesize(const char* text) {
+    // send text
+    m_request.clear_end_of_utterance();
+    m_request.set_text(text);
+    bool ok = m_streamer->Write(m_request);
+
+    if (ok) {
+      // send end signal
+      m_request.clear_text();
+      m_request.set_allocated_end_of_utterance(new EndOfUtterance());
+      ok = m_streamer->Write(m_request);
+      if (!ok) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Verbio failed sending EndOfUtterance\n");	
+      }
     } else {
-      if (v->flushed) return;
-      bool fireEvent = false;
-        CircularBuffer_t *cBuffer = (CircularBuffer_t *) v->circularBuffer;
-        auto audioData = response.audio_samples();
-        /**
-         * this sort of reinterpretation can be dangerous as a general rule, but in this case we know that the data
-         * is 16-bit PCM, so it's safe to do this and its much faster than copying the data byte by byte
-         */
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Verbio failed sending text\n");	
+    }
+
+    return ok;
+  }
+
+  bool read(StreamingSynthesisResponse* response) {
+    return m_streamer->Read(response);
+  }
+
+  grpc::Status finish() {
+    return m_streamer->Finish();
+  }
+
+  private:
+    grpc::ClientContext m_context;
+    std::shared_ptr<grpc::Channel> m_channel;
+    std::unique_ptr<TextToSpeech::Stub> m_stub;
+    StreamingSynthesisRequest m_request;
+    std::unique_ptr<
+      grpc::ClientReaderWriter<StreamingSynthesisRequest, StreamingSynthesisResponse>,
+      std::default_delete<grpc::ClientReaderWriter<StreamingSynthesisRequest, StreamingSynthesisResponse>>> m_streamer;
+
+};
+
+static void start_synthesis(verbio_t* v) {
+  GStreamer* streamer = (GStreamer *) v->streamer;
+  StreamingSynthesisResponse response;
+  CircularBuffer_t *cBuffer = (CircularBuffer_t *) v->circularBuffer;
+  while(streamer->read(&response)) {
+    if (v->flushed) break;
+    if (response.has_streaming_audio()) {
+        const auto& audioData = response.streaming_audio().audio_samples();
         const uint16_t* begin = reinterpret_cast<const uint16_t*>(audioData.data());
         const uint16_t* end = reinterpret_cast<const uint16_t*>(audioData.data() + audioData.size());
 
-         /* lock as briefly as possible */
+          /* lock as briefly as possible */
         switch_mutex_lock(v->mutex);
         if (cBuffer->capacity() - cBuffer->size() < audioData.size()) {
           cBuffer->set_capacity(cBuffer->size() + std::max( audioData.size(), (size_t)BUFFER_SIZE));
         }
         cBuffer->insert(cBuffer->end(), begin, end);
         switch_mutex_unlock(v->mutex);
-
-        if (0 == v->reads++) {
-          fireEvent = true;
-        }
-
-        if (fireEvent && v->session_id) {
-          auto endTime = std::chrono::high_resolution_clock::now();
-          auto startTime = *static_cast<std::chrono::time_point<std::chrono::high_resolution_clock>*>(v->startTime);
-          auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-          auto time_to_first_byte_ms = std::to_string(duration.count());
-          switch_core_session_t* session = switch_core_session_locate(v->session_id);
-          if (session) {
-            switch_channel_t *channel = switch_core_session_get_channel(session);
-            switch_core_session_rwunlock(session);
-            if (channel) {
-              switch_event_t *event;
-              if (switch_event_create(&event, SWITCH_EVENT_PLAYBACK_START) == SWITCH_STATUS_SUCCESS) {
-                switch_channel_event_set_data(channel, event);
-                switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Playback-File-Type", "tts_stream");
-                switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_time_to_first_byte_ms", time_to_first_byte_ms.c_str());
-                if (v->cache_filename) {
-                  switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_cache_filename", v->cache_filename);
-                }
-                switch_event_fire(&event);
-              } else {
-                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "start_synthesis: failed to create event\n");
-              }
-            }else {
-              switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "start_synthesis: channel not found\n");
-            }
-          }
-        }
     }
-  } else {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "mod_verbio_tts: Cannot open GRPC connection to Verbio");
+    else if (response.has_end_of_utterance()) {
+        break;
+    }
   }
-    v->draining = 1;
+  v->draining = 1;
 }
 
 extern "C" {
@@ -205,8 +224,9 @@ extern "C" {
     v->circularBuffer = (void *) new CircularBuffer_t(BUFFER_SIZE);
 
     
+
     try {
-      std::thread(start_synthesis, text, v).detach();
+      std::thread(start_synthesis, v).detach();
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "verbio_speech_feed_tts sent synthesize request\n");
     } catch (const std::exception& e) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "mod_verbio_tts: Exception: %s\n", e.what());
@@ -278,6 +298,11 @@ extern "C" {
     v->circularBuffer = nullptr ;
     delete static_cast<std::chrono::time_point<std::chrono::high_resolution_clock>*>(v->startTime);
     v->startTime = nullptr;
+
+    GStreamer* streamer = (GStreamer *) v->streamer;
+    streamer->finish();
+    delete streamer;
+    v->streamer = nullptr;
 
     v->flushed = 1;
     if (!download_complete) {
