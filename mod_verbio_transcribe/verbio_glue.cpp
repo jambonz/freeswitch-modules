@@ -29,60 +29,64 @@ namespace {
 class GStreamer {
 public:
   GStreamer(cap_cb *cb) : 
-      m_writesDone(false), 
-      m_connected(false), 
-      m_interim(cb->interim),
-      m_audioBuffer(CHUNKSIZE, 15) {
-        strncpy(m_sessionId, cb->sessionId, 256);
-        std::shared_ptr<grpc::Channel> grpcChannel ;
-        auto channelCreds = grpc::SslCredentials(grpc::SslCredentialsOptions());
-        grpcChannel = grpc::CreateChannel("us.speechcenter.verbio.com", channelCreds);
+    m_writesDone(false), 
+    m_connected(false), 
+    m_interim(cb->interim),
+    m_audioBuffer(CHUNKSIZE, 15) {
 
-        if (!grpcChannel) {
-          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "GStreamer %p failed creating grpc channel\n", this);  
-          throw std::runtime_error(std::string("Error creating grpc channel"));
-        }
-        m_context.AddMetadata("authorization", "Bearer" + std::string(cb->access_token));
+    strncpy(m_sessionId, cb->sessionId, 256);
+    std::shared_ptr<grpc::Channel> grpcChannel ;
+    auto channelCreds = grpc::SslCredentials(grpc::SslCredentialsOptions());
+    grpcChannel = grpc::CreateChannel(
+                    "us.speechcenter.verbio.com",
+                    grpc::CompositeChannelCredentials(
+                    grpc::SslCredentials(grpc::SslCredentialsOptions()),
+                    grpc::AccessTokenCredentials(cb->access_token)));
 
-        m_stub = std::move(verbio_asr::Recognizer::NewStub(grpcChannel));
+    if (!grpcChannel) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "GStreamer %p failed creating grpc channel\n", this);  
+      throw std::runtime_error(std::string("Error creating grpc channel"));
+    }
 
-        auto* config = m_request.mutable_config();
-        // RecognitionParameters
-        auto* params = config->mutable_parameters();
-        params->set_language(cb->language);
-        auto* pcm = params->mutable_pcm();
-        pcm->set_sample_rate_hz(8000);
-        params->set_audio_channels_number(cb->channels);
-        params->set_enable_formatting(cb->enable_formatting);
-        params->set_audio_channels_number(cb->channels);
+    m_stub = std::move(verbio_asr::Recognizer::NewStub(grpcChannel));
 
-        if (cb->inline_grammar || cb->grammar_uri) {
-          auto* resource = config->mutable_resource();
-          resource->set_topic(static_cast<verbio_asr::RecognitionResource_Topic>(cb->topic));
-          auto* grammar = resource->mutable_grammar();
-          if (cb->inline_grammar) {
-            grammar->set_inline_grammar(cb->inline_grammar);
-          } else if (cb->grammar_uri) {
-            grammar->set_grammar_uri(cb->grammar_uri);
-          }
-        }
-
-        config->set_version(static_cast<verbio_asr::RecognitionConfig_AsrVersion>(cb->engine_version));
-        config->add_label(cb->label);
-        if (cb->recognition_timeout || cb->speech_complete_timeout || cb->speech_incomplete_timeout) {
-          auto* timer = config->mutable_configuration();
-          timer->set_start_input_timers(true);
-          if (cb->recognition_timeout) {
-            timer->set_recognition_timeout(cb->recognition_timeout);
-          }
-          if (cb->speech_complete_timeout) {
-            timer->set_speech_complete_timeout(cb->speech_complete_timeout);
-          }
-          if (cb->speech_incomplete_timeout) {
-            timer->set_speech_incomplete_timeout(cb->speech_incomplete_timeout);
-          }
-        }
+    auto* config = m_request.mutable_config();
+    // RecognitionParameters
+    auto* params = config->mutable_parameters();
+    params->set_language(cb->language);
+    auto* pcm = params->mutable_pcm();
+    pcm->set_sample_rate_hz(8000);
+    params->set_audio_channels_number(cb->channels);
+    params->set_enable_formatting(cb->enable_formatting);
+    auto* resource = config->mutable_resource();
+    resource->set_topic(static_cast<verbio_asr::RecognitionResource_Topic>(cb->topic));
+    if (!zstr(cb->inline_grammar) || !zstr(cb->grammar_uri)) {
+      auto* grammar = resource->mutable_grammar();
+      if (cb->inline_grammar) {
+        grammar->set_inline_grammar(cb->inline_grammar);
+      } else if (cb->grammar_uri) {
+        grammar->set_grammar_uri(cb->grammar_uri);
       }
+    }
+
+    config->set_version(static_cast<verbio_asr::RecognitionConfig_AsrVersion>(cb->engine_version));
+    if (cb->label) {
+      config->add_label(cb->label);
+    }
+    if (cb->recognition_timeout || cb->speech_complete_timeout || cb->speech_incomplete_timeout) {
+      auto* timer = config->mutable_configuration();
+      timer->set_start_input_timers(true);
+      if (cb->recognition_timeout) {
+        timer->set_recognition_timeout(cb->recognition_timeout);
+      }
+      if (cb->speech_complete_timeout) {
+        timer->set_speech_complete_timeout(cb->speech_complete_timeout);
+      }
+      if (cb->speech_incomplete_timeout) {
+        timer->set_speech_incomplete_timeout(cb->speech_incomplete_timeout);
+      }
+    }
+  }
 
   ~GStreamer() {
     //switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(m_session), SWITCH_LOG_INFO, "GStreamer::~GStreamer - deleting channel and stub: %p\n", (void*)this);
@@ -101,7 +105,7 @@ public:
 
     // Write the first request, containing the config only.
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer %p sending initial message\n", this);  
-    m_streamer->Write(m_request);
+    bool ok = m_streamer->Write(m_request);
     m_request.clear_config();
 
     // send any buffered audio
@@ -126,7 +130,7 @@ public:
       return true;
     }
     m_request.clear_audio();
-    m_request.set_audio(data, datalen);
+    m_request.set_audio(data, datalen); 
     bool ok = m_streamer->Write(m_request);
     return ok;
   }
@@ -225,8 +229,17 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
       continue;
     } else {
       const auto& result = response.result();
+      if (response.result().alternatives_size() > 0) {
+        const auto& alternative = response.result().alternatives(0);
+        if (alternative.words_size() == 0) {
+            continue;
+        }
+      }
       std::string json_string;
-      absl::Status status = google::protobuf::util::MessageToJsonString(result, &json_string);
+      google::protobuf::util::JsonPrintOptions options;
+      options.always_print_primitive_fields = true;
+      options.preserve_proto_field_names = true;
+      absl::Status status = google::protobuf::util::MessageToJsonString(result, &json_string, options);
 
       if (!status.ok()) {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Cannot parse verbio result, error: %s", status.ToString()) ;
@@ -297,9 +310,11 @@ extern "C" {
       cb->topic = 0;
     }
     if (var = switch_channel_get_variable(channel, "VERBIO_INLINE_GRAMMAR")) {
+      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "xhoaluu1 %s\n", var);
       strncpy(cb->inline_grammar, var, LONG_TEXT_LEN);
     }
     if (var = switch_channel_get_variable(channel, "VERBIO_GRAMMAR_URI")) {
+      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "xhoaluu2 %s\n", var);
       strncpy(cb->grammar_uri, var, LONG_TEXT_LEN);
     }
     if (var = switch_channel_get_variable(channel, "VERBIO_LABEL")) {
