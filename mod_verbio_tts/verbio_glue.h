@@ -1,5 +1,5 @@
-#ifndef __VERBIO_TTS_GLUE_H__
-#define __VERBIO_TTS_GLUE_H__
+#ifndef __VERBIO_GLUE_H__
+#define __VERBIO_GLUE_H__
 
 switch_status_t verbio_speech_load();
 switch_status_t verbio_speech_open(verbio_t* verbio);

@@ -10,23 +10,24 @@ typedef struct verbio_data {
 
   /* result data */
   long response_code;
-  char *session_id;
-  char *cache_filename;
+  char *ct;
+  char *name_lookup_time_ms;
+  char *connect_time_ms;
+  char *final_response_time_ms;
   char *err_msg;
+  char *cache_filename;
+  char *session_id;
 
   int rate;
   int draining;
   int reads;
   int cache_audio;
-  int flushed;
 
-  void *startTime;
-
+	void *conn;
+  void *circularBuffer;
+  switch_mutex_t *mutex;
   FILE *file;
   SpeexResamplerState *resampler;
-  void *circularBuffer;
-  void *streamer;
-  switch_mutex_t *mutex;
 } verbio_t;
 
 #endif

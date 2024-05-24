@@ -5,16 +5,25 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_verbio_tts_load);
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_verbio_tts_shutdown);
 SWITCH_MODULE_DEFINITION(mod_verbio_tts, mod_verbio_tts_load, mod_verbio_tts_shutdown, NULL);
 
-static void clearVerbio(verbio_t* v, int freeAll) {
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "clearVerbio\n");
-
-  if (v->cache_filename) free(v->cache_filename);
+static void clearverbio(verbio_t* v, int freeAll) {
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "clearverbio\n");
   if (v->access_token) free(v->access_token);
 
-  v->cache_filename = NULL;
-  v->access_token = NULL;
-  v->err_msg = NULL;
+  if (v->ct) free(v->ct);
+  if (v->err_msg) free(v->err_msg);
+  if (v->name_lookup_time_ms) free(v->name_lookup_time_ms);
+  if (v->connect_time_ms) free(v->connect_time_ms);
+  if (v->final_response_time_ms) free(v->final_response_time_ms);
+  if (v->cache_filename) free(v->cache_filename);
+  
 
+  v->access_token = NULL;
+  v->ct = NULL;
+  v->err_msg = NULL;
+  v->name_lookup_time_ms = NULL;
+  v->connect_time_ms = NULL;
+  v->final_response_time_ms = NULL;
+  v->cache_filename = NULL;
 
   if (freeAll) {
     if (v->voice_name) free(v->voice_name);
@@ -22,7 +31,6 @@ static void clearVerbio(verbio_t* v, int freeAll) {
     v->voice_name = NULL;
     v->session_id = NULL;
   }
-
 }
 
 static verbio_t * createOrRetrievePrivateData(switch_speech_handle_t *sh) {
@@ -32,7 +40,7 @@ static verbio_t * createOrRetrievePrivateData(switch_speech_handle_t *sh) {
   	sh->private_info = v;
     memset(v, 0, sizeof(*v));
     switch_mutex_init(&v->mutex, SWITCH_MUTEX_NESTED, sh->memory_pool);
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "allocated verbio_t\n");
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "allocated verbio_t\n");
   }
   return v;
 }
@@ -42,7 +50,7 @@ switch_status_t v_speech_open(switch_speech_handle_t *sh, const char *voice_name
   verbio_t *v = createOrRetrievePrivateData(sh);
   v->voice_name = strdup(voice_name);
   v->rate = rate;
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "v_speech_open voice: %s, rate %d, channels %d\n", voice_name, rate, channels);
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "v_speech_open voice: %s, rate %d, channels %d\n", voice_name, rate, channels);
   return verbio_speech_open(v);
 }
 
@@ -50,12 +58,12 @@ static switch_status_t v_speech_close(switch_speech_handle_t *sh, switch_speech_
 {
   switch_status_t rc;
   verbio_t *v = createOrRetrievePrivateData(sh);
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "v_speech_close\n");
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "v_speech_close\n");
 
   switch_mutex_destroy(v->mutex);
 
   rc = verbio_speech_close(v);
-  clearVerbio(v, 1);
+  clearverbio(v, 1);
   return rc;
 }
 
@@ -67,9 +75,10 @@ static switch_status_t v_speech_feed_tts(switch_speech_handle_t *sh, char *text,
   verbio_t *v = createOrRetrievePrivateData(sh);
   v->draining = 0;
   v->reads = 0;
-  v->flushed = 0;
   v->response_code = 0;
   v->err_msg = NULL;
+
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "v_speech_feed_tts\n");
 
   return verbio_speech_feed_tts(v, text, flags);
 }
@@ -89,15 +98,16 @@ static switch_status_t v_speech_read_tts(switch_speech_handle_t *sh, void *data,
 static void v_speech_flush_tts(switch_speech_handle_t *sh)
 {
   verbio_t *v = createOrRetrievePrivateData(sh);
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "v_speech_flush_tts\n");
   verbio_speech_flush_tts(v);
 
-  clearVerbio(v, 0);
+  clearverbio(v, 0);
 }
 
 static void v_text_param_tts(switch_speech_handle_t *sh, char *param, const char *val)
 {
   verbio_t *v = createOrRetrievePrivateData(sh);
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "v_text_param_tts: %s=%s\n", param, val);
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "v_text_param_tts: %s=%s\n", param, val);
   if (0 == strcmp(param, "access_token")) {
     if (v->access_token) free(v->access_token);
     v->access_token = strdup(val);
