@@ -86,6 +86,7 @@ static switch_status_t d_speech_feed_tts(switch_speech_handle_t *sh, char *text,
   d->reads = 0;
   d->response_code = 0;
   d->err_msg = NULL;
+  d->playback_start_sent = 0;
 
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "d_speech_feed_tts\n");
 

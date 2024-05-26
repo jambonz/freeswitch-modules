@@ -511,6 +511,7 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
 
           switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_time_to_first_byte_ms", time_to_first_byte_ms.c_str());
           switch_event_fire(&event);
+          p->playback_start_sent = 1;
         }
         else {
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "write_cb: failed to create event\n");
@@ -939,7 +940,9 @@ extern "C" {
 
     if (conn) {
       conn->flushed = true;
-      if (!download_complete) {
+      if (!download_complete ||
+        // if playback event has not been sent, delete the file.
+        !p->playback_start_sent) {
         if (conn->file) {
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "closing audio cache file %s because download was interrupted\n", p->cache_filename);
           if (fclose(conn->file) != 0) {

@@ -39,6 +39,7 @@ struct elevenlabs_data {
   int draining;
   int reads;
   int cache_audio;
+  int playback_start_sent;
   SpeexResamplerState *resampler;
 };
 

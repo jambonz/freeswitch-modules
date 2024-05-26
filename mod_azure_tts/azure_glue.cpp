@@ -255,6 +255,7 @@ extern "C" {
                   switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_cache_filename", a->cache_filename);
                 }
                 switch_event_fire(&event);
+                a->playback_start_sent = 1;
               } else {
                 switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "speechSynthesizer->Synthesizing: failed to create event\n");
               }
@@ -339,7 +340,10 @@ extern "C" {
     a->startTime = nullptr;
 
     a->flushed = 1;
-    if (!download_complete) {
+    //
+    if (!download_complete ||
+      // If playback_start has not been sent, delete the file
+      !a->playback_start_sent) {
       if (a->file) {
         //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "closing audio cache file %s because download was interrupted\n", a->cache_filename);
         if (fclose(a->file) != 0) {
