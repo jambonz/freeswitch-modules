@@ -532,6 +532,7 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
 
           switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_tts_time_to_first_byte_ms", time_to_first_byte_ms.c_str());
           switch_event_fire(&event);
+          el->playback_start_sent = 1;
         }
         else {
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "write_cb: failed to create event\n");
@@ -987,17 +988,17 @@ extern "C" {
           }
           conn->file = nullptr ;
         }
-
-        if (el->cache_filename) {
-          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "removing audio cache file %s because download was interrupted\n", el->cache_filename);
-          if (unlink(el->cache_filename) != 0) {
-            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "cleanupConn: error removing audio cache file %s: %d:%s\n", 
-              el->cache_filename, errno, strerror(errno));
-          }
-          free(el->cache_filename);
-          el->cache_filename = nullptr ;
-        }
       }
+    }
+    // If playback_start has not been sent, delete the file
+    if (el->cache_filename && !el->playback_start_sent) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "removing audio cache file %s because download was interrupted\n", el->cache_filename);
+      if (unlink(el->cache_filename) != 0) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "cleanupConn: error removing audio cache file %s: %d:%s\n", 
+          el->cache_filename, errno, strerror(errno));
+      }
+      free(el->cache_filename);
+      el->cache_filename = nullptr ;
     }
     if (el->session_id) {
       switch_core_session_t* session = switch_core_session_locate(el->session_id);

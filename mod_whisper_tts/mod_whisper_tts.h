@@ -35,6 +35,7 @@ typedef struct whisper_data {
   int draining;
   int reads;
   int cache_audio;
+  int playback_start_sent;
 
 	void *conn;
   void *circularBuffer;

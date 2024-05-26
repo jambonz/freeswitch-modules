@@ -108,6 +108,7 @@ static switch_status_t ell_speech_feed_tts(switch_speech_handle_t *sh, char *tex
   el->reads = 0;
   el->response_code = 0;
   el->err_msg = NULL;
+  el->playback_start_sent = 0;
   
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "ell_speech_feed_tts\n");
   
