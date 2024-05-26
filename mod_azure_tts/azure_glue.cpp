@@ -340,9 +340,7 @@ extern "C" {
     a->startTime = nullptr;
 
     a->flushed = 1;
-    if (!download_complete ||
-      // If playback_start has not been sent, delete the file
-      !a->playback_start_sent) {
+    if (!download_complete) {
       if (a->file) {
         //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "closing audio cache file %s because download was interrupted\n", a->cache_filename);
         if (fclose(a->file) != 0) {
@@ -350,16 +348,16 @@ extern "C" {
         }
         a->file = nullptr ;
       }
-
-      if (a->cache_filename) {
-        //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "removing audio cache file %s because download was interrupted\n", a->cache_filename);
-        if (unlink(a->cache_filename) != 0) {
-          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "cleanupConn: error removing audio cache file %s: %d:%s\n", 
-            a->cache_filename, errno, strerror(errno));
-        }
-        free(a->cache_filename);
-        a->cache_filename = nullptr ;
+    }
+    // If playback_start has not been sent, delete the file
+    if (a->cache_filename && !a->playback_start_sent) {
+      //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "removing audio cache file %s because download was interrupted\n", a->cache_filename);
+      if (unlink(a->cache_filename) != 0) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "cleanupConn: error removing audio cache file %s: %d:%s\n", 
+          a->cache_filename, errno, strerror(errno));
       }
+      free(a->cache_filename);
+      a->cache_filename = nullptr ;
     }
     if (a->session_id) {
       switch_core_session_t* session = switch_core_session_locate(a->session_id);

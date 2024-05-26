@@ -932,7 +932,7 @@ extern "C" {
 
   switch_status_t playht_speech_flush_tts(playht_t* p) {
     bool download_complete = p->response_code == 200;
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "playht_speech_flush_tts, download complete? %s\n", download_complete ? "yes" : "no") ;  
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "playht_speech_flush_tts, download complete? %s\n", download_complete ? "yes" : "no") ;
     ConnInfo_t *conn = (ConnInfo_t *) p->conn;
     CircularBuffer_t *cBuffer = (CircularBuffer_t *) p->circularBuffer;
     delete cBuffer;
@@ -940,9 +940,7 @@ extern "C" {
 
     if (conn) {
       conn->flushed = true;
-      if (!download_complete ||
-        // if playback event has not been sent, delete the file.
-        !p->playback_start_sent) {
+      if (!download_complete) {
         if (conn->file) {
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "closing audio cache file %s because download was interrupted\n", p->cache_filename);
           if (fclose(conn->file) != 0) {
@@ -950,17 +948,17 @@ extern "C" {
           }
           conn->file = nullptr ;
         }
-
-        if (p->cache_filename) {
-          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "removing audio cache file %s because download was interrupted\n", p->cache_filename);
-          if (unlink(p->cache_filename) != 0) {
-            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "cleanupConn: error removing audio cache file %s: %d:%s\n", 
-              p->cache_filename, errno, strerror(errno));
-          }
-          free(p->cache_filename);
-          p->cache_filename = nullptr ;
-        }
       }
+    }
+    // if playback event has not been sent, delete the file.
+    if (p->cache_filename && !p->playback_start_sent) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "removing audio cache file %s because download was interrupted\n", p->cache_filename);
+      if (unlink(p->cache_filename) != 0) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "cleanupConn: error removing audio cache file %s: %d:%s\n", 
+          p->cache_filename, errno, strerror(errno));
+      }
+      free(p->cache_filename);
+      p->cache_filename = nullptr ;
     }
     if (p->session_id) {
       switch_core_session_t* session = switch_core_session_locate(p->session_id);
