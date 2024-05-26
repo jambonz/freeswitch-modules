@@ -340,7 +340,6 @@ extern "C" {
     a->startTime = nullptr;
 
     a->flushed = 1;
-    //
     if (!download_complete ||
       // If playback_start has not been sent, delete the file
       !a->playback_start_sent) {
