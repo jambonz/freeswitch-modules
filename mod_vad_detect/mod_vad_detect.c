@@ -10,7 +10,7 @@ static void responseHandler(switch_core_session_t* session, switch_vad_state_t s
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "responseHandler event %s.\n", VAD_EVENT_DETECTION);
   switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, VAD_EVENT_DETECTION);
   switch_channel_event_set_data(channel, event);
-  switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "detection-event", state == SWITCH_VAD_STATE_START_TALKING ? "start_talking" : "stop_talking");
+  switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "detected-event", state == SWITCH_VAD_STATE_START_TALKING ? "start_talking" : "stop_talking");
   if (bugname) switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "media-bugname", bugname);
   switch_event_fire(&event);
 }
