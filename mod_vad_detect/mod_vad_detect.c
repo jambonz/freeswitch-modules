@@ -5,20 +5,20 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_vad_detect_load);
 SWITCH_MODULE_DEFINITION(mod_vad_detect, mod_vad_detect_load, mod_vad_detect_shutdown, NULL);
 
 static void responseHandler(switch_core_session_t* session, const char* eventName, const char* bugname) {
-	switch_event_t *event;
-	switch_channel_t *channel = switch_core_session_get_channel(session);
-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "responseHandler event %s.\n", eventName);
-	switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, eventName);
-	switch_channel_event_set_data(channel, event);
-	if (bugname) switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "media-bugname", bugname);
-	switch_event_fire(&event);
+  switch_event_t *event;
+  switch_channel_t *channel = switch_core_session_get_channel(session);
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "responseHandler event %s.\n", eventName);
+  switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, eventName);
+  switch_channel_event_set_data(channel, event);
+  if (bugname) switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "media-bugname", bugname);
+  switch_event_fire(&event);
 }
 
 static void cleanVadDetect(private_t* u) {
   if (u) {
     if (u->vad) {
       switch_vad_destroy(&u->vad);
-			u->vad = NULL;
+      u->vad = NULL;
     }
     if (u->bugname) free(u->bugname);
     if (u->action) free(u->action);
@@ -28,16 +28,16 @@ static void cleanVadDetect(private_t* u) {
 static switch_status_t do_stop(switch_core_session_t *session, char* bugname) {
   switch_status_t status = SWITCH_STATUS_SUCCESS;
 
-	switch_channel_t *channel = switch_core_session_get_channel(session);
-	switch_media_bug_t *bug = switch_channel_get_private(channel, bugname);
+  switch_channel_t *channel = switch_core_session_get_channel(session);
+  switch_media_bug_t *bug = switch_channel_get_private(channel, bugname);
 
-	if (bug) {
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "do_stop: Received user command command to stop vad detection.\n");
+  if (bug) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "do_stop: Received user command command to stop vad detection.\n");
     switch_core_media_bug_remove(session, &bug);
-		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "do_stop: stopped vad detection.\n");
-	}
+    switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "do_stop: stopped vad detection.\n");
+  }
 
-	return status;
+  return status;
 }
 
 static switch_bool_t capture_callback(switch_media_bug_t *bug, void *user_data, switch_abc_type_t type)
@@ -100,21 +100,21 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
   char* action, int mode, uint32_t silence_ms, uint32_t voice_ms, char* bugname)
 {
   switch_channel_t *channel = switch_core_session_get_channel(session);
-	switch_media_bug_t *bug;
-	switch_status_t status = SWITCH_STATUS_SUCCESS; 
+  switch_media_bug_t *bug;
+  switch_status_t status = SWITCH_STATUS_SUCCESS; 
   private_t* userData = (private_t *) switch_core_session_alloc(session, sizeof(*userData));
   switch_codec_implementation_t read_impl = { 0 };
   uint32_t samples_per_second;
 
   if (switch_channel_get_private(channel, bugname)) {
-		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "removing bug from previous transcribe\n");
-		do_stop(session, bugname);
-	}
+    switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "removing bug from previous transcribe\n");
+    do_stop(session, bugname);
+  }
   
 
   if (switch_channel_pre_answer(channel) != SWITCH_STATUS_SUCCESS) {
-		return SWITCH_STATUS_FALSE;
-	}
+    return SWITCH_STATUS_FALSE;
+  }
   switch_core_session_get_read_impl(session, &read_impl);
   samples_per_second = !strcasecmp(read_impl.iananame, "g722") ? read_impl.actual_samples_per_second : read_impl.samples_per_second;
 
