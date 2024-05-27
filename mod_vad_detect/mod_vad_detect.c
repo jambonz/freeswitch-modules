@@ -4,12 +4,13 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_vad_detect_shutdown);
 SWITCH_MODULE_LOAD_FUNCTION(mod_vad_detect_load);
 SWITCH_MODULE_DEFINITION(mod_vad_detect, mod_vad_detect_load, mod_vad_detect_shutdown, NULL);
 
-static void responseHandler(switch_core_session_t* session, const char* eventName, const char* bugname) {
+static void responseHandler(switch_core_session_t* session, switch_vad_state_t state, const char* bugname) {
   switch_event_t *event;
   switch_channel_t *channel = switch_core_session_get_channel(session);
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "responseHandler event %s.\n", eventName);
-  switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, eventName);
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "responseHandler event %s.\n", VAD_EVENT_DETECTION);
+  switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, VAD_EVENT_DETECTION);
   switch_channel_event_set_data(channel, event);
+  switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "detection-event", state == SWITCH_VAD_STATE_START_TALKING ? "start_talking" : "stop_talking");
   if (bugname) switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "media-bugname", bugname);
   switch_event_fire(&event);
 }
@@ -68,16 +69,16 @@ static switch_bool_t capture_callback(switch_media_bug_t *bug, void *user_data, 
           switch (state)
           {
             case SWITCH_VAD_STATE_START_TALKING:
-              responseHandler(session, VAD_EVENT_START_TALKING, userData->bugname);
-              if (!strcasecmp(userData->action, "one-shot")) {
+            case SWITCH_VAD_STATE_STOP_TALKING:
+              responseHandler(session, state, userData->bugname);
+              if (state == SWITCH_VAD_STATE_START_TALKING &&
+                !strcasecmp(userData->action, "one-shot")) {
                 // detect start point, stop the mod
                 do_stop(session, userData->bugname);
                 return SWITCH_TRUE;
               }
             break;
-            case SWITCH_VAD_STATE_STOP_TALKING:
-              responseHandler(session, VAD_EVENT_STOP_TALKING, userData->bugname);
-              break;
+
             case SWITCH_VAD_STATE_TALKING:
             case SWITCH_VAD_STATE_NONE:
             default:
@@ -193,13 +194,8 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_vad_detect_load)
   switch_api_interface_t *api_interface;
 
   /* create/register custom event message type */
-  if (switch_event_reserve_subclass(VAD_EVENT_START_TALKING) != SWITCH_STATUS_SUCCESS) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", VAD_EVENT_START_TALKING);
-    return SWITCH_STATUS_TERM;
-  }
-
-  if (switch_event_reserve_subclass(VAD_EVENT_STOP_TALKING) != SWITCH_STATUS_SUCCESS) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", VAD_EVENT_STOP_TALKING);
+  if (switch_event_reserve_subclass(VAD_EVENT_DETECTION) != SWITCH_STATUS_SUCCESS) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", VAD_EVENT_DETECTION);
     return SWITCH_STATUS_TERM;
   }
 
@@ -211,8 +207,8 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_vad_detect_load)
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "VAD detection API successfully loaded\n");
 
   SWITCH_ADD_API(api_interface, "uuid_vad_detect", "VAD detection API", vad_detect_function, VAD_API_SYNTAX);
-  switch_console_set_complete("add uuid_deepgram_transcribe start lang-code [interim|final] [stereo|mono]");
-  switch_console_set_complete("add uuid_deepgram_transcribe stop ");
+  switch_console_set_complete("add uuid_vad_detect start [one-shot|continuous] mode silence-ms voice-ms [bugname]");
+  switch_console_set_complete("add uuid_vad_detect stop [bugname]");
 
   /* indicate that the module should continue to be loaded */
   return SWITCH_STATUS_SUCCESS;
@@ -223,7 +219,6 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_vad_detect_load)
   Macro expands to: switch_status_t mod_vad_detect_shutdown() */
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_vad_detect_shutdown)
 {
-  switch_event_free_subclass(VAD_EVENT_START_TALKING);
-  switch_event_free_subclass(VAD_EVENT_STOP_TALKING);
+  switch_event_free_subclass(VAD_EVENT_DETECTION);
   return SWITCH_STATUS_SUCCESS;
 }
