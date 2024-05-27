@@ -71,7 +71,7 @@ static switch_bool_t capture_callback(switch_media_bug_t *bug, void *user_data, 
               responseHandler(session, VAD_EVENT_START_TALKING, userData->bugname);
               if (!strcasecmp(userData->action, "one-shot")) {
                 // detect start point, stop the mod
-                switch_core_media_bug_remove(session, &bug);
+                do_stop(session, userData->bugname);
                 return SWITCH_TRUE;
               }
             break;
