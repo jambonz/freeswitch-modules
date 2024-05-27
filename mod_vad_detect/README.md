@@ -20,6 +20,8 @@ This command attaches a media bug to a channel and starts Voice Activity Detecti
     - 1 ("low bitrate")
     - 2 ("aggressive")
     - 3  ("very aggressive")
+- `silence-ms`: number of milliseconds of silence that must come to transition from talking to stop talking
+- `voice-ms`: number of milliseconds of voice that must come to transition to start talking
 
 ```
 uuid_vad_detect stop [bugname]
