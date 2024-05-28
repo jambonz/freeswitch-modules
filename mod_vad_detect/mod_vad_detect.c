@@ -153,7 +153,7 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
     switch_channel_set_private(channel, bugname, bug);
   }
   switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Successfully initiated vad resource\n");
-  return SWITCH_STATUS_FALSE;
+  return SWITCH_STATUS_SUCCESS;
 }
 
 #define VAD_API_SYNTAX "<uuid> [start|stop] [one-shot|continuous] mode silence-ms voice-ms [bugname]"
