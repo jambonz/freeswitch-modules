@@ -9,9 +9,13 @@
 typedef struct private_data
 {
   char *bugname;
-  char *action;
+  char *strategy;
+  char *sessionId;
+
+  int stopping;
 
   switch_vad_t *vad;
+  switch_thread_t* thread;
 
 } private_t;
 

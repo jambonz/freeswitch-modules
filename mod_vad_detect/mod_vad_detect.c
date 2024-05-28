@@ -7,7 +7,8 @@ SWITCH_MODULE_DEFINITION(mod_vad_detect, mod_vad_detect_load, mod_vad_detect_shu
 static void responseHandler(switch_core_session_t* session, switch_vad_state_t state, const char* bugname) {
   switch_event_t *event;
   switch_channel_t *channel = switch_core_session_get_channel(session);
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "responseHandler event %s.\n", VAD_EVENT_DETECTION);
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "responseHandler event %s, detect %s.\n", VAD_EVENT_DETECTION,
+    state == SWITCH_VAD_STATE_START_TALKING ? "start_talking" : "stop_talking");
   switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, VAD_EVENT_DETECTION);
   switch_channel_event_set_data(channel, event);
   switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "detected-event", state == SWITCH_VAD_STATE_START_TALKING ? "start_talking" : "stop_talking");
@@ -22,7 +23,8 @@ static void cleanVadDetect(private_t* u) {
       u->vad = NULL;
     }
     if (u->bugname) free(u->bugname);
-    if (u->action) free(u->action);
+    if (u->strategy) free(u->strategy);
+    if (u->sessionId) free(u->sessionId);
   }
 }
 
@@ -31,9 +33,8 @@ static switch_status_t do_stop(switch_core_session_t *session, char* bugname) {
 
   switch_channel_t *channel = switch_core_session_get_channel(session);
   switch_media_bug_t *bug = switch_channel_get_private(channel, bugname);
-
   if (bug) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "do_stop: Received user command command to stop vad detection.\n");
+    switch_channel_set_private(channel, bugname, NULL);
     switch_core_media_bug_remove(session, &bug);
     switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "do_stop: stopped vad detection.\n");
   }
@@ -41,10 +42,19 @@ static switch_status_t do_stop(switch_core_session_t *session, char* bugname) {
   return status;
 }
 
+static void *SWITCH_THREAD_FUNC stop_thread(switch_thread_t *thread, void *obj) {
+  private_t* u = (private_t*) obj;
+  switch_core_session_t* session = switch_core_session_locate(u->sessionId);
+  do_stop(session, u->bugname);
+  switch_core_session_rwunlock(session);
+  return NULL;
+}
+
 static switch_bool_t capture_callback(switch_media_bug_t *bug, void *user_data, switch_abc_type_t type)
 {
   switch_core_session_t *session = switch_core_media_bug_get_session(bug);
-  private_t* userData = (private_t*) switch_core_media_bug_get_user_data(bug);
+  switch_memory_pool_t *pool = switch_core_session_get_pool(session);
+  private_t* userData = (private_t*) user_data;
 
   switch (type) {
   case SWITCH_ABC_TYPE_INIT:
@@ -59,10 +69,14 @@ static switch_bool_t capture_callback(switch_media_bug_t *bug, void *user_data, 
   case SWITCH_ABC_TYPE_READ:
     {
       uint8_t data[SWITCH_RECOMMENDED_BUFFER_SIZE];
+      switch_threadattr_t *thd_attr = NULL;
       switch_frame_t frame;
       memset(&frame, 0, sizeof(frame));
       frame.data = data;
       frame.buflen = SWITCH_RECOMMENDED_BUFFER_SIZE;
+      if (userData->stopping) {
+        return SWITCH_TRUE;
+      }
       while (switch_core_media_bug_read(bug, &frame, SWITCH_TRUE) == SWITCH_STATUS_SUCCESS && !switch_test_flag((&frame), SFF_CNG)) {
         if (frame.datalen) {
           switch_vad_state_t state = switch_vad_process(userData->vad, (int16_t*) frame.data, frame.samples);
@@ -71,11 +85,12 @@ static switch_bool_t capture_callback(switch_media_bug_t *bug, void *user_data, 
             case SWITCH_VAD_STATE_START_TALKING:
             case SWITCH_VAD_STATE_STOP_TALKING:
               responseHandler(session, state, userData->bugname);
-              if (state == SWITCH_VAD_STATE_START_TALKING &&
-                !strcasecmp(userData->action, "one-shot")) {
-                // detect start point, stop the mod
-                do_stop(session, userData->bugname);
-                return SWITCH_TRUE;
+              if (!strcasecmp(userData->strategy, "one-shot")) {
+                userData->stopping = 1;
+                // create the stop thread
+                switch_threadattr_create(&thd_attr, pool);
+                switch_threadattr_stacksize_set(thd_attr, SWITCH_THREAD_STACKSIZE);
+                switch_thread_create(&userData->thread, thd_attr, stop_thread, userData, pool);
               }
             break;
 
@@ -108,7 +123,7 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
   uint32_t samples_per_second;
 
   if (switch_channel_get_private(channel, bugname)) {
-    switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "removing bug from previous transcribe\n");
+    switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "removing bug from previous vad detection\n");
     do_stop(session, bugname);
   }
   
@@ -119,10 +134,12 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
   switch_core_session_get_read_impl(session, &read_impl);
   samples_per_second = !strcasecmp(read_impl.iananame, "g722") ? read_impl.actual_samples_per_second : read_impl.samples_per_second;
 
+  userData->stopping = 0;
   userData->vad = switch_vad_init(samples_per_second, 1);
   if (userData->vad) {
     userData->bugname = strdup(bugname);
-    userData->action = strdup(action);
+    userData->strategy = strdup(action);
+    userData->sessionId = strdup(switch_core_session_get_uuid(session));
     switch_vad_set_mode(userData->vad, mode);
     switch_vad_set_param(userData->vad, "silence_ms", silence_ms);
     switch_vad_set_param(userData->vad, "voice_ms", voice_ms);
@@ -130,10 +147,12 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
     switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "configured vad mode %d, silence_ms %d, voice_ms %d\n", 
       mode, silence_ms, voice_ms);
     if ((status = switch_core_media_bug_add(session, bugname, NULL, capture_callback, userData, 0, flags, &bug)) != SWITCH_STATUS_SUCCESS) {
+      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Failed to initiate vad resource\n");
       return status;
     }
+    switch_channel_set_private(channel, bugname, bug);
   }
-  switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Cannot initiate vad resource\n");
+  switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Successfully initiated vad resource\n");
   return SWITCH_STATUS_FALSE;
 }
 
