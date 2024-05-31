@@ -19,6 +19,7 @@
 
 #define CHUNKSIZE (320)
 #define DEFAULT_SPEECH_TIMEOUT "180000"
+#define AZURE_KEEP_ALIVE_INTERVAL_SECOND (3)
 
 using namespace Microsoft::CognitiveServices::Speech;
 using namespace Microsoft::CognitiveServices::Speech::Audio;
@@ -36,7 +37,7 @@ static const char* proxyPassword = std::getenv("JAMBONES_HTTP_PROXY_PASSWORD");
 class GStreamer {
 public:
 	GStreamer(
-    const char *sessionId,
+		const char *sessionId,
 		const char *bugname,
 		u_int16_t channels,
     char *lang, 
@@ -51,6 +52,15 @@ public:
 
 		switch_core_session_t* psession = switch_core_session_locate(sessionId);
 		if (!psession) throw std::invalid_argument( "session id no longer active" );
+		//Due to use_single_connection, each GStreamer need to identify itself by configuration, if there is changes in configuration,
+		// the GStreamer will be closed and replaced by new object with new configuration.
+		m_configuration_stream << 
+			channels << ";" <<
+			lang << ";" <<
+			interim << ";" <<
+			samples_per_second << ";" <<
+			region << ";" <<
+			subscriptionKey << ";";
 		switch_channel_t *channel = switch_core_session_get_channel(psession);
  
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer::GStreamer(%p) region %s, language %s\n", 
@@ -59,6 +69,9 @@ public:
 
 		const char* endpoint = switch_channel_get_variable(channel, "AZURE_SERVICE_ENDPOINT");
 		const char* endpointId = switch_channel_get_variable(channel, "AZURE_SERVICE_ENDPOINT_ID");
+		m_configuration_stream <<
+			endpoint << ";" <<
+			endpointId << ";";
 
 		auto sourceLanguageConfig = SourceLanguageConfig::FromLanguage(lang);
 		auto format = AudioStreamFormat::GetWaveFormatPCM(8000, 16, channels);
@@ -69,6 +82,7 @@ public:
 				SpeechConfig::FromEndpoint(endpoint)) :
 			SpeechConfig::FromSubscription(subscriptionKey, region);
 		if (switch_true(switch_channel_get_variable(channel, "AZURE_USE_OUTPUT_FORMAT_DETAILED"))) {
+			m_configuration_stream << "output_format_detailed;";
 			speechConfig->SetOutputFormat(OutputFormat::Detailed);
 		}
 		if (nullptr != endpointId) {
@@ -80,12 +94,18 @@ public:
 			speechConfig->SetProperty(PropertyId::Speech_LogFilename, sdkLog);
 		}
 		if (switch_true(switch_channel_get_variable(channel, "AZURE_AUDIO_LOGGING"))) {
+			m_configuration_stream << "audio_logging;";
 			speechConfig->EnableAudioLogging();
 		}
 
     if (nullptr != proxyIP && nullptr != proxyPort) {
       switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(psession), SWITCH_LOG_DEBUG, "setting proxy: %s:%s\n", proxyIP, proxyPort);
       speechConfig->SetProxy(proxyIP, atoi(proxyPort), proxyUsername, proxyPassword);
+			m_configuration_stream <<
+				proxyIP << ";" <<
+				proxyPort << ";" <<
+				proxyUsername << ";" <<
+				proxyPassword << ";";
     }
 
 		m_pushStream = AudioInputStream::CreatePushStream(format);
@@ -94,6 +114,7 @@ public:
     // alternative language
 		const char* var;
     if (var = switch_channel_get_variable(channel, "AZURE_SPEECH_ALTERNATIVE_LANGUAGE_CODES")) {
+			m_configuration_stream << var << ";";
 			std::vector<std::string> languages;
 			char *alt_langs[3] = { 0 };
       int argc = switch_separate_string((char *) var, ',', alt_langs, 3);
@@ -118,18 +139,22 @@ public:
 		// profanity options: Allowed values are "masked", "removed", and "raw".
 		const char* profanity = switch_channel_get_variable(channel, "AZURE_PROFANITY_OPTION");
 		if (profanity) {
+			m_configuration_stream << profanity << ";";
 			properties.SetProperty(PropertyId::SpeechServiceResponse_ProfanityOption, profanity);
 		}
 		// report signal-to-noise ratio
 		if (switch_true(switch_channel_get_variable(channel, "AZURE_REQUEST_SNR"))) {
+			m_configuration_stream << "request_snr;";
 			properties.SetProperty(PropertyId::SpeechServiceResponse_RequestSnr, TrueString);
 		}
 		// initial speech timeout in milliseconds
 		const char* timeout = switch_channel_get_variable(channel, "AZURE_INITIAL_SPEECH_TIMEOUT_MS");
+		m_configuration_stream << timeout << ";";
 		if (timeout) properties.SetProperty(PropertyId::SpeechServiceConnection_InitialSilenceTimeoutMs, timeout);
 		else properties.SetProperty(PropertyId::SpeechServiceConnection_InitialSilenceTimeoutMs, DEFAULT_SPEECH_TIMEOUT);
 
     const char* segmentationInterval = switch_channel_get_variable(channel, "AZURE_SPEECH_SEGMENTATION_SILENCE_TIMEOUT_MS");
+		m_configuration_stream << segmentationInterval << ";";
     if (segmentationInterval) {
       switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(psession), SWITCH_LOG_DEBUG, "setting segmentation interval to %s ms\n", segmentationInterval);
       properties.SetProperty(PropertyId::Speech_SegmentationSilenceTimeoutMs, segmentationInterval);
@@ -137,6 +162,7 @@ public:
 
 		//https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-identification?tabs=once&pivots=programming-language-cpp#at-start-and-continuous-language-identification
 		const char* languageIdMode = switch_channel_get_variable(channel, "AZURE_LANGUAGE_ID_MODE");
+		m_configuration_stream << languageIdMode << ";";
 		if (languageIdMode) {
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(psession), SWITCH_LOG_DEBUG, "setting SpeechServiceConnection_LanguageIdMode to %s \n", languageIdMode);
 			properties.SetProperty(PropertyId::SpeechServiceConnection_LanguageIdMode, languageIdMode);
@@ -153,6 +179,7 @@ public:
 
 		// hints
 		const char* hints = switch_channel_get_variable(channel, "AZURE_SPEECH_HINTS");
+		m_configuration_stream << hints << ";";
 		if (hints) {
 			auto grammar = PhraseListGrammar::FromRecognizer(m_recognizer);
 			char *phrases[500] = { 0 };
@@ -253,6 +280,10 @@ public:
 		//switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer::~GStreamer %p\n", this);		
 	}
 
+	const char* configuration() {
+		return m_configuration_stream.str().c_str();
+	}
+
 	void connect() {
 		if (m_connecting) return;
 		m_connecting = true;
@@ -304,7 +335,7 @@ public:
 
 	void finish() {
 		if (m_finished) return;
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "GStreamer::finish - calling  StopContinuousRecognitionAsync (%p)\n", this);
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer::finish - calling  StopContinuousRecognitionAsync (%p)\n", this);
 		m_finished = true;
 		m_recognizer->StopContinuousRecognitionAsync().get();
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "GStreamer::finish - recognition has completed (%p)\n", this);
@@ -324,6 +355,7 @@ private:
 	std::string  m_region;
 	std::shared_ptr<SpeechRecognizer> m_recognizer;
 	std::shared_ptr<PushAudioInputStream> m_pushStream;
+	std::ostringstream m_configuration_stream;
 
 	responseHandler_t m_responseHandler;
 	bool m_interim;
@@ -388,6 +420,7 @@ extern "C" {
 		GStreamer *streamer = NULL;
 		switch_status_t status = SWITCH_STATUS_SUCCESS;
 		switch_channel_t *channel = switch_core_session_get_channel(session);
+		switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, bugname);
 		int err;
 		switch_threadattr_t *thd_attr = NULL;
 		switch_memory_pool_t *pool = switch_core_session_get_pool(session);
@@ -418,14 +451,43 @@ extern "C" {
 
 		cb->responseHandler = responseHandler;
 
+		cb->interim = interim;
+		strncpy(cb->lang, lang, MAX_LANG);
+
+		try {
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "%s: initializing gstreamer with %s\n", 
+					switch_channel_get_name(channel), bugname);
+			streamer = new GStreamer(sessionId, bugname, channels, lang, interim, sampleRate, cb->region, subscriptionKey, responseHandler);
+			cb->streamer = streamer;
+
+			if (bug) {
+				struct cap_cb* existing_cb = (struct cap_cb*) switch_core_media_bug_get_user_data(bug);
+				GStreamer* existing_streamer = (GStreamer*) existing_cb->streamer;
+				if (0 != strcmp(existing_streamer->configuration(), streamer->configuration())) {
+					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "azure_transcribe_session_init: stop existing azure connection, old configuration %s, new configuration %s\n",
+					existing_streamer->configuration(), streamer->configuration());
+					if (existing_streamer) reaper(existing_cb);
+					killcb(existing_cb);
+					switch_mutex_destroy(existing_cb->mutex);
+				} else {
+					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "azure_transcribe_session_init: enable existing azure connection\n");
+					killcb(cb);
+					cb = existing_cb;
+					status = SWITCH_STATUS_SUCCESS;
+					goto done; 
+				}
+			}
+		} catch (std::exception& e) {
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "%s: Error initializing gstreamer: %s.\n", 
+				switch_channel_get_name(channel), e.what());
+			return SWITCH_STATUS_FALSE;
+		}
+
 		if (switch_mutex_init(&cb->mutex, SWITCH_MUTEX_NESTED, pool) != SWITCH_STATUS_SUCCESS) {
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Error initializing mutex\n");
 			status = SWITCH_STATUS_FALSE;
 			goto done; 
 		}
-
-		cb->interim = interim;
-		strncpy(cb->lang, lang, MAX_LANG);
 
 		/* determine if we need to resample the audio to 16-bit 8khz */
 		if (sampleRate != 8000) {
@@ -468,33 +530,29 @@ extern "C" {
 					switch_channel_get_name(channel), voice_ms, mode);
 			}
 		}
-
-		try {
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "%s: initializing gstreamer with %s\n", 
-					switch_channel_get_name(channel), bugname);
-			streamer = new GStreamer(sessionId, bugname, channels, lang, interim, sampleRate, cb->region, subscriptionKey, responseHandler);
-			cb->streamer = streamer;
-			if (!cb->vad) streamer->connect();
-		} catch (std::exception& e) {
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "%s: Error initializing gstreamer: %s.\n", 
-				switch_channel_get_name(channel), e.what());
-			return SWITCH_STATUS_FALSE;
-		}
-
-
-		*ppUserData = cb;
-	
+		if (!cb->vad) streamer->connect();
 	done:
+		*ppUserData = cb;
+		cb->is_keep_alive = 0;
+		cb->frame_count = 0;
 		return status;
 	}
 
 	switch_status_t azure_transcribe_session_stop(switch_core_session_t *session, int channelIsClosing, char* bugname) {
 		switch_channel_t *channel = switch_core_session_get_channel(session);
 		switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, bugname);
+		const bool use_single_connection = switch_true(std::getenv("AZURE_SPEECH_USE_SINGLE_CONNECTION"));
 
 		if (bug) {
 			struct cap_cb *cb = (struct cap_cb *) switch_core_media_bug_get_user_data(bug);
 			switch_status_t st;
+
+			if (use_single_connection && !channelIsClosing) {
+				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "azure_transcribe_session_stop: call is running, use_single_connection is true, keep alive is activated\n");
+				cb->is_keep_alive = 1;
+				cb->frame_count = 0;
+				return SWITCH_STATUS_SUCCESS;
+			}
 
 			// close connection and get final responses
 			switch_mutex_lock(cb->mutex);
@@ -507,6 +565,7 @@ extern "C" {
 			if (streamer) reaper(cb);
 			killcb(cb);
 			switch_mutex_unlock(cb->mutex);
+			switch_mutex_destroy(cb->mutex);
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "azure_transcribe_session_stop: unlocked session\n");
 
 			return SWITCH_STATUS_SUCCESS;
@@ -524,6 +583,23 @@ extern "C" {
 
 		frame.data = data;
 		frame.buflen = SWITCH_RECOMMENDED_BUFFER_SIZE;
+		if (cb->is_keep_alive) {
+			if (++cb->frame_count * 20 /*ms*/ / 1000 >= AZURE_KEEP_ALIVE_INTERVAL_SECOND) {
+				cb->frame_count = 0;
+				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "azure_transcribe_frame: azure connection is alive but no activity, ignore data frame.\n");
+			}
+
+			// remove media bug buffered data
+ 			while (true) {
+				unsigned char data[SWITCH_RECOMMENDED_BUFFER_SIZE] = {0};
+				switch_frame_t frame = { 0 };
+				frame.data = data;
+				frame.buflen = SWITCH_RECOMMENDED_BUFFER_SIZE;
+				switch_status_t rv = switch_core_media_bug_read(bug, &frame, SWITCH_TRUE);
+				if (rv != SWITCH_STATUS_SUCCESS) break;
+			}
+			return SWITCH_TRUE;
+		}
 
 		if (switch_mutex_trylock(cb->mutex) == SWITCH_STATUS_SUCCESS) {
 			GStreamer* streamer = (GStreamer *) cb->streamer;
