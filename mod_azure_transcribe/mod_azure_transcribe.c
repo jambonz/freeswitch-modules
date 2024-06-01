@@ -71,9 +71,9 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
 	switch_codec_implementation_t read_impl = { 0 };
 	void *pUserData;
 	uint32_t samples_per_second;
-
-
-	if (switch_channel_get_private(channel, bugname)) {
+	int use_single_connection = switch_true(getenv("AZURE_SPEECH_USE_SINGLE_CONNECTION"));
+	bug = switch_channel_get_private(channel, bugname);
+	if (bug && !use_single_connection) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "removing bug from previous transcribe\n");
 		do_stop(session, bugname);
 	}
@@ -91,12 +91,13 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error initializing azure speech session.\n");
 		return SWITCH_STATUS_FALSE;
 	}
-	if ((status = switch_core_media_bug_add(session, bugname, NULL, capture_callback, pUserData, 0, flags, &bug)) != SWITCH_STATUS_SUCCESS) {
-		return status;
+	if (!bug || !use_single_connection) {
+		if ((status = switch_core_media_bug_add(session, bugname, NULL, capture_callback, pUserData, 0, flags, &bug)) != SWITCH_STATUS_SUCCESS) {
+			return status;
+		}
+		switch_channel_set_private(channel, bugname, bug);
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "added media bug for azure transcribe\n");
 	}
-  switch_channel_set_private(channel, bugname, bug);
-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "added media bug for azure transcribe\n");
-
 	return SWITCH_STATUS_SUCCESS;
 }
 

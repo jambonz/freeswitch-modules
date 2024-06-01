@@ -37,6 +37,8 @@ struct cap_cb {
 	char lang[MAX_LANG];
 	char region[MAX_REGION];
 
+	int is_keep_alive;
+
 	switch_vad_t * vad;
 };
 
