@@ -19,7 +19,7 @@
 
 #define CHUNKSIZE (320)
 #define DEFAULT_SPEECH_TIMEOUT "180000"
-#define AZURE_KEEP_ALIVE_INTERVAL_SECOND (3)
+#define AZURE_KEEP_ALIVE_INTERVAL_SECOND (8)
 
 using namespace Microsoft::CognitiveServices::Speech;
 using namespace Microsoft::CognitiveServices::Speech::Audio;
