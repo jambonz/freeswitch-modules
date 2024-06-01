@@ -19,7 +19,6 @@
 
 #define CHUNKSIZE (320)
 #define DEFAULT_SPEECH_TIMEOUT "180000"
-#define AZURE_KEEP_ALIVE_INTERVAL_SECOND (8)
 
 using namespace Microsoft::CognitiveServices::Speech;
 using namespace Microsoft::CognitiveServices::Speech::Audio;
@@ -534,7 +533,6 @@ extern "C" {
 	done:
 		*ppUserData = cb;
 		cb->is_keep_alive = 0;
-		cb->frame_count = 0;
 		return status;
 	}
 
@@ -550,7 +548,6 @@ extern "C" {
 			if (use_single_connection && !channelIsClosing) {
 				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "azure_transcribe_session_stop: call is running, use_single_connection is true, keep alive is activated\n");
 				cb->is_keep_alive = 1;
-				cb->frame_count = 0;
 				return SWITCH_STATUS_SUCCESS;
 			}
 
@@ -584,10 +581,6 @@ extern "C" {
 		frame.data = data;
 		frame.buflen = SWITCH_RECOMMENDED_BUFFER_SIZE;
 		if (cb->is_keep_alive) {
-			if (++cb->frame_count * 20 /*ms*/ / 1000 >= AZURE_KEEP_ALIVE_INTERVAL_SECOND) {
-				cb->frame_count = 0;
-				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "azure_transcribe_frame: azure connection is alive but no activity, ignore data frame.\n");
-			}
 
 			// remove media bug buffered data
  			while (true) {
