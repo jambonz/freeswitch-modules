@@ -809,6 +809,12 @@ extern "C" {
     cJSON * jResult = cJSON_CreateObject();
     cJSON_AddStringToObject(jResult, "model_id", el->model_id);
     cJSON_AddStringToObject(jResult, "text", text);
+    if (el->previous_text) {
+      cJSON_AddStringToObject(jResult, "previous_text", el->previous_text);
+    }
+    if (el->next_text) {
+      cJSON_AddStringToObject(jResult, "next_text", el->next_text);
+    }
     if (el->similarity_boost || el->style || el->use_speaker_boost || el->stability) {
       cJSON * jVoiceSettings = cJSON_CreateObject();
       cJSON_AddItemToObject(jResult, "voice_settings", jVoiceSettings);

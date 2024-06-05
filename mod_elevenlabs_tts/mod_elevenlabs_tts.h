@@ -17,6 +17,8 @@ struct elevenlabs_data {
   char* style;
   char* use_speaker_boost;
   char* optimize_streaming_latency;
+  char* previous_text;
+  char* next_text;
 
   /* result data */
   long response_code;
