@@ -267,7 +267,7 @@ extern "C" {
       };
 
       std::thread(start_synthesis, speechSynthesizer, text, a).detach();
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts sent synthesize request\n");
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts sent synthesize request for text %s\n", tempText);
     } catch (const std::exception& e) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "mod_azure_tts: Exception: %s\n", e.what());
       return SWITCH_STATUS_FALSE;
