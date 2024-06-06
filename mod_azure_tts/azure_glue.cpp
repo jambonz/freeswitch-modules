@@ -15,6 +15,8 @@ typedef boost::circular_buffer<uint16_t> CircularBuffer_t;
 
 using namespace Microsoft::CognitiveServices::Speech;
 
+static const char* audioLogging = std::getenv("AZURE_AUDIO_LOGGING");
+
 static std::string fullDirPath;
 
 static void start_synthesis(std::shared_ptr<SpeechSynthesizer> speechSynthesizer, const char* text, azure_t* a) {
@@ -167,6 +169,11 @@ extern "C" {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts setting endpoint id: %s\n", a->endpointId);
 			speechConfig->SetEndpointId(a->endpointId);
 		}
+
+    if (audioLogging) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts enabling audio logging\n");
+      speechConfig->EnableAudioLogging();
+    }
 
     try {
       auto speechSynthesizer = SpeechSynthesizer::FromConfig(speechConfig);
