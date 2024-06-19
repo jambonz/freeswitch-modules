@@ -177,7 +177,7 @@ extern "C" {
     }
 
     try {
-      auto speechSynthesizer = SpeechSynthesizer::FromConfig(speechConfig);
+      auto speechSynthesizer = SpeechSynthesizer::FromConfig(speechConfig, nullptr);
 
       speechSynthesizer->SynthesisStarted += [a](const SpeechSynthesisEventArgs& e) {
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts SynthesisStarted\n");
