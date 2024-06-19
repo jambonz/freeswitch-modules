@@ -32,6 +32,7 @@ static const char* proxyIP = std::getenv("JAMBONES_HTTP_PROXY_IP");
 static const char* proxyPort = std::getenv("JAMBONES_HTTP_PROXY_PORT");
 static const char* proxyUsername = std::getenv("JAMBONES_HTTP_PROXY_USERNAME");
 static const char* proxyPassword = std::getenv("JAMBONES_HTTP_PROXY_PASSWORD");
+static const bool use_single_connection = switch_true(std::getenv("AZURE_SPEECH_USE_SINGLE_CONNECTION"));
 
 class GStreamer {
 public:
@@ -53,7 +54,8 @@ public:
 		if (!psession) throw std::invalid_argument( "session id no longer active" );
 		//Due to use_single_connection, each GStreamer need to identify itself by configuration, if there is changes in configuration,
 		// the GStreamer will be closed and replaced by new object with new configuration.
-		m_configuration_stream << 
+		std::ostringstream configuration_stream;
+    configuration_stream << 
 			channels << ";" <<
 			lang << ";" <<
 			interim << ";" <<
@@ -68,7 +70,7 @@ public:
 
 		const char* endpoint = switch_channel_get_variable(channel, "AZURE_SERVICE_ENDPOINT");
 		const char* endpointId = switch_channel_get_variable(channel, "AZURE_SERVICE_ENDPOINT_ID");
-		m_configuration_stream <<
+		configuration_stream <<
 			endpoint << ";" <<
 			endpointId << ";";
 
@@ -81,7 +83,7 @@ public:
 				SpeechConfig::FromEndpoint(endpoint)) :
 			SpeechConfig::FromSubscription(subscriptionKey, region);
 		if (switch_true(switch_channel_get_variable(channel, "AZURE_USE_OUTPUT_FORMAT_DETAILED"))) {
-			m_configuration_stream << "output_format_detailed;";
+			configuration_stream << "output_format_detailed;";
 			speechConfig->SetOutputFormat(OutputFormat::Detailed);
 		}
 		if (nullptr != endpointId) {
@@ -93,14 +95,14 @@ public:
 			speechConfig->SetProperty(PropertyId::Speech_LogFilename, sdkLog);
 		}
 		if (switch_true(switch_channel_get_variable(channel, "AZURE_AUDIO_LOGGING"))) {
-			m_configuration_stream << "audio_logging;";
+			configuration_stream << "audio_logging;";
 			speechConfig->EnableAudioLogging();
 		}
 
     if (nullptr != proxyIP && nullptr != proxyPort) {
       switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(psession), SWITCH_LOG_DEBUG, "setting proxy: %s:%s\n", proxyIP, proxyPort);
       speechConfig->SetProxy(proxyIP, atoi(proxyPort), proxyUsername, proxyPassword);
-			m_configuration_stream <<
+			configuration_stream <<
 				proxyIP << ";" <<
 				proxyPort << ";" <<
 				proxyUsername << ";" <<
@@ -113,7 +115,7 @@ public:
     // alternative language
 		const char* var;
     if (var = switch_channel_get_variable(channel, "AZURE_SPEECH_ALTERNATIVE_LANGUAGE_CODES")) {
-			m_configuration_stream << var << ";";
+			configuration_stream << var << ";";
 			std::vector<std::string> languages;
 			char *alt_langs[3] = { 0 };
       int argc = switch_separate_string((char *) var, ',', alt_langs, 3);
@@ -138,22 +140,22 @@ public:
 		// profanity options: Allowed values are "masked", "removed", and "raw".
 		const char* profanity = switch_channel_get_variable(channel, "AZURE_PROFANITY_OPTION");
 		if (profanity) {
-			m_configuration_stream << profanity << ";";
+			configuration_stream << profanity << ";";
 			properties.SetProperty(PropertyId::SpeechServiceResponse_ProfanityOption, profanity);
 		}
 		// report signal-to-noise ratio
 		if (switch_true(switch_channel_get_variable(channel, "AZURE_REQUEST_SNR"))) {
-			m_configuration_stream << "request_snr;";
+			configuration_stream << "request_snr;";
 			properties.SetProperty(PropertyId::SpeechServiceResponse_RequestSnr, TrueString);
 		}
 		// initial speech timeout in milliseconds
 		const char* timeout = switch_channel_get_variable(channel, "AZURE_INITIAL_SPEECH_TIMEOUT_MS");
-		m_configuration_stream << timeout << ";";
+		configuration_stream << timeout << ";";
 		if (timeout) properties.SetProperty(PropertyId::SpeechServiceConnection_InitialSilenceTimeoutMs, timeout);
 		else properties.SetProperty(PropertyId::SpeechServiceConnection_InitialSilenceTimeoutMs, DEFAULT_SPEECH_TIMEOUT);
 
     const char* segmentationInterval = switch_channel_get_variable(channel, "AZURE_SPEECH_SEGMENTATION_SILENCE_TIMEOUT_MS");
-		m_configuration_stream << segmentationInterval << ";";
+		configuration_stream << segmentationInterval << ";";
     if (segmentationInterval) {
       switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(psession), SWITCH_LOG_DEBUG, "setting segmentation interval to %s ms\n", segmentationInterval);
       properties.SetProperty(PropertyId::Speech_SegmentationSilenceTimeoutMs, segmentationInterval);
@@ -161,7 +163,7 @@ public:
 
 		//https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-identification?tabs=once&pivots=programming-language-cpp#at-start-and-continuous-language-identification
 		const char* languageIdMode = switch_channel_get_variable(channel, "AZURE_LANGUAGE_ID_MODE");
-		m_configuration_stream << languageIdMode << ";";
+		configuration_stream << languageIdMode << ";";
 		if (languageIdMode) {
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(psession), SWITCH_LOG_DEBUG, "setting SpeechServiceConnection_LanguageIdMode to %s \n", languageIdMode);
 			properties.SetProperty(PropertyId::SpeechServiceConnection_LanguageIdMode, languageIdMode);
@@ -178,7 +180,7 @@ public:
 
 		// hints
 		const char* hints = switch_channel_get_variable(channel, "AZURE_SPEECH_HINTS");
-		m_configuration_stream << hints << ";";
+		configuration_stream << hints << ";";
 		if (hints) {
 			auto grammar = PhraseListGrammar::FromRecognizer(m_recognizer);
 			char *phrases[500] = { 0 };
@@ -273,6 +275,9 @@ public:
 		m_recognizer->Canceled += onCanceled;
 
 		switch_core_session_rwunlock(psession);
+
+    // Store the final configuration string
+    m_configuration_string = configuration_stream.str();
 	}
 
 	~GStreamer() {
@@ -280,7 +285,7 @@ public:
 	}
 
 	const char* configuration() {
-		return m_configuration_stream.str().c_str();
+		return m_configuration_string.c_str();
 	}
 
 	void connect() {
@@ -354,8 +359,7 @@ private:
 	std::string  m_region;
 	std::shared_ptr<SpeechRecognizer> m_recognizer;
 	std::shared_ptr<PushAudioInputStream> m_pushStream;
-	std::ostringstream m_configuration_stream;
-
+  std::string m_configuration_string;
 	responseHandler_t m_responseHandler;
 	bool m_interim;
 	bool m_finished;
@@ -458,6 +462,7 @@ extern "C" {
 					switch_channel_get_name(channel), bugname);
 			streamer = new GStreamer(sessionId, bugname, channels, lang, interim, sampleRate, cb->region, subscriptionKey, responseHandler);
 			cb->streamer = streamer;
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "azure_transcribe_session_init: config: %s\n", streamer->configuration());
 
 			if (bug) {
 				struct cap_cb* existing_cb = (struct cap_cb*) switch_core_media_bug_get_user_data(bug);
@@ -541,7 +546,6 @@ extern "C" {
 	switch_status_t azure_transcribe_session_stop(switch_core_session_t *session, int channelIsClosing, char* bugname) {
 		switch_channel_t *channel = switch_core_session_get_channel(session);
 		switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, bugname);
-		const bool use_single_connection = switch_true(std::getenv("AZURE_SPEECH_USE_SINGLE_CONNECTION"));
 
 		if (bug) {
 			struct cap_cb *cb = (struct cap_cb *) switch_core_media_bug_get_user_data(bug);
