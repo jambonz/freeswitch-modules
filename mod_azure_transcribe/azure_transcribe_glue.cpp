@@ -470,6 +470,8 @@ extern "C" {
 					switch_mutex_destroy(existing_cb->mutex);
 				} else {
 					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "azure_transcribe_session_init: enable existing azure connection\n");
+					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "azure_transcribe_session_init: old config: %s\n", existing_streamer->configuration());
+					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "azure_transcribe_session_init: new config: %s\n", streamer->configuration());
 					killcb(cb);
 					cb = existing_cb;
 					status = SWITCH_STATUS_SUCCESS;
