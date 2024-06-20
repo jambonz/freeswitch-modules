@@ -500,17 +500,17 @@ extern "C" {
 		if (bug) {
 			struct cap_cb* existing_cb = (struct cap_cb*) switch_core_media_bug_get_user_data(bug);
 			GStreamer* existing_streamer = (GStreamer*) existing_cb->streamer;
-			if (existing_streamer->isConfigurationChanged(channels, lang, interim, sampleRate, region, subscriptionKey)) {
-				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Azure configuration is changed, destroy old and create new azure connection\n");
-				reaper(existing_cb);
-				streamer =  new GStreamer(sessionId, bugname, channels, lang, interim, sampleRate, region, subscriptionKey, responseHandler);
-				if (!existing_cb->vad) streamer->connect();
-				existing_cb->streamer = streamer;
-				*ppUserData = existing_cb;
-			} else {
-				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Reuse active azure connection.\n");
-			}
 			existing_cb->is_keep_alive = 0;
+			if (!existing_streamer->isConfigurationChanged(channels, lang, interim, sampleRate, region, subscriptionKey)) {
+				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Reuse active azure connection.\n");
+				return SWITCH_STATUS_SUCCESS;
+			}
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Azure configuration is changed, destroy old and create new azure connection\n");
+			reaper(existing_cb);
+			streamer =  new GStreamer(sessionId, bugname, channels, lang, interim, sampleRate, region, subscriptionKey, responseHandler);
+			if (!existing_cb->vad) streamer->connect();
+			existing_cb->streamer = streamer;
+			*ppUserData = existing_cb;
 			return SWITCH_STATUS_SUCCESS;
 		}
 		int err;
