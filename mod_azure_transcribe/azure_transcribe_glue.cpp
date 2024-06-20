@@ -471,17 +471,18 @@ extern "C" {
 					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "azure_transcribe_session_init: stop existing azure connection, old configuration %s, new configuration %s\n",
 					existing_streamer->configuration(), streamer->configuration());
 					if (existing_streamer) reaper(existing_cb);
-					killcb(existing_cb);
-					switch_mutex_destroy(existing_cb->mutex);
+					// take newly created streamer
+					cb->streamer = NULL;
+					// assigned new streamer to existing cb
+					existing_cb->streamer = streamer;
+					streamer->connect();
 				} else {
 					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "azure_transcribe_session_init: enable existing azure connection\n");
-					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "azure_transcribe_session_init: old config: %s\n", existing_streamer->configuration());
-					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "azure_transcribe_session_init: new config: %s\n", streamer->configuration());
-					killcb(cb);
-					cb = existing_cb;
-					status = SWITCH_STATUS_SUCCESS;
-					goto done; 
 				}
+				killcb(cb);
+				cb = existing_cb;
+				status = SWITCH_STATUS_SUCCESS;
+				goto done; 
 			}
 		} catch (std::exception& e) {
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "%s: Error initializing gstreamer: %s.\n", 
@@ -587,7 +588,6 @@ extern "C" {
 		frame.data = data;
 		frame.buflen = SWITCH_RECOMMENDED_BUFFER_SIZE;
 		if (cb->is_keep_alive) {
-
 			// remove media bug buffered data
  			while (true) {
 				unsigned char data[SWITCH_RECOMMENDED_BUFFER_SIZE] = {0};
@@ -599,7 +599,6 @@ extern "C" {
 			}
 			return SWITCH_TRUE;
 		}
-
 		if (switch_mutex_trylock(cb->mutex) == SWITCH_STATUS_SUCCESS) {
 			GStreamer* streamer = (GStreamer *) cb->streamer;
 			if (streamer) {
