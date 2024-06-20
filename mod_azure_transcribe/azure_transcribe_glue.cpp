@@ -248,7 +248,7 @@ public:
 		m_recognizer->Canceled += onCanceled;
 
 		// Store the final configuration string
-    m_configuration_string = createConfiguration(channels, lang, interim, samples_per_second, region, subscriptionKey, psession);
+    m_configuration_string = createConfigurationStr(channels, lang, interim, samples_per_second, region, subscriptionKey, psession);
 
 		switch_core_session_rwunlock(psession);
 	}
@@ -326,7 +326,7 @@ public:
     return m_connecting;
   }
 
-	bool isConfigurationChanged(
+	bool hasConfigurationChanged(
 		u_int16_t channels,
 		char *lang, 
 		int interim,
@@ -336,10 +336,10 @@ public:
 		switch_core_session_t* psession = switch_core_session_locate(m_sessionId.c_str());
 		if (!psession) throw std::invalid_argument( "session id no longer active" );
 
-		std::string newConfiguration = createConfiguration(channels, lang, interim, samples_per_second, region, subscriptionKey, psession);
+		std::string newConfiguration = createConfigurationStr(channels, lang, interim, samples_per_second, region, subscriptionKey, psession);
 
 		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(psession), SWITCH_LOG_DEBUG,
-			"isConfigurationChanged: old configurattion: %s, new configuration: %s\n", configuration(),  newConfiguration.c_str());
+			"hasConfigurationChanged: old configurattion: %s, new configuration: %s\n", configuration(),  newConfiguration.c_str());
 
 		switch_core_session_rwunlock(psession);
 
@@ -361,7 +361,7 @@ private:
 	bool m_stopped;
 	SimpleBuffer m_audioBuffer;
 
-	std::string createConfiguration(
+	std::string createConfigurationStr(
 		u_int16_t channels,
 		char *lang, 
 		int interim,
@@ -488,7 +488,7 @@ extern "C" {
 			struct cap_cb* existing_cb = (struct cap_cb*) switch_core_media_bug_get_user_data(bug);
 			GStreamer* existing_streamer = (GStreamer*) existing_cb->streamer;
 			existing_cb->is_keep_alive = 0;
-			if (!existing_streamer->isConfigurationChanged(channels, lang, interim, sampleRate, region, subscriptionKey)) {
+			if (!existing_streamer->hasConfigurationChanged(channels, lang, interim, sampleRate, region, subscriptionKey)) {
 				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Reuse active azure connection.\n");
 				return SWITCH_STATUS_SUCCESS;
 			}
