@@ -43,36 +43,55 @@ namespace {
     uint16_t* data_uint16 = reinterpret_cast<uint16_t*>(data);
     std::vector<uint16_t> pcm_data(data_uint16, data_uint16 + dataLength / sizeof(uint16_t));
 
+    // resample if necessary
+    try {
+      if (tech_pvt->bidirectional_audio_resampler) {
+        std::vector<int16_t> in(pcm_data.begin(), pcm_data.end());
 
-    if (tech_pvt->bidirectional_audio_resampler) {
-      std::vector<int16_t> in(pcm_data.begin(), pcm_data.end());
+        std::vector<int16_t> out(dataLength);
+        spx_uint32_t in_len = pcm_data.size();
+        spx_uint32_t out_len = out.size();
+        speex_resampler_process_interleaved_int(tech_pvt->bidirectional_audio_resampler, in.data(), &in_len, out.data(), &out_len);
 
-      std::vector<int16_t> out(dataLength);
-      spx_uint32_t in_len = pcm_data.size();
-      spx_uint32_t out_len = out.size();
-      speex_resampler_process_interleaved_int(tech_pvt->bidirectional_audio_resampler, in.data(), &in_len, out.data(), &out_len);
+        if (out_len > out.size()) {
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CRIT, "Resampler output exceeded maximum buffer size!\n");
+          return SWITCH_STATUS_FALSE;
+        }
 
-      if (out_len > out.size()) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CRIT, "Resampler output exceeded maximum buffer size!\n");
-        return SWITCH_STATUS_FALSE;
+        // Resize the pcm_data to match the output length from resampler, and then copy the resampled data into it.
+        pcm_data.resize(out_len);
+        memcpy(pcm_data.data(), out.data(), out_len * sizeof(int16_t));
       }
-
-      // Resize the pcm_data to match the output length from resampler, and then copy the resampled data into it.
-      pcm_data.resize(out_len);
-      memcpy(pcm_data.data(), out.data(), out_len * sizeof(int16_t));
+    } catch (const std::exception& e) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error resampling incoming binary message: %s\n", e.what());
+      return SWITCH_STATUS_FALSE;
+    } catch (...) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error resampling incoming binary message\n");
+      return SWITCH_STATUS_FALSE;
     }
+
     switch_mutex_lock(tech_pvt->mutex);
 
-    // Resize the buffer if necessary
-    size_t bytesResampled = pcm_data.size() * sizeof(uint16_t);
-    if (cBuffer->capacity() - cBuffer->size() < bytesResampled / sizeof(uint16_t)) {
-      // If buffer exceeds some max size, you could return SWITCH_STATUS_FALSE to abort the transfer
-      // if (cBuffer->size() + std::max(bytesResampled / sizeof(uint16_t), (size_t)BUFFER_GROW_SIZE) > MAX_BUFFER_SIZE) return SWITCH_STATUS_FALSE;
+    try {
+      // Resize the buffer if necessary
+      size_t bytesResampled = pcm_data.size() * sizeof(uint16_t);
+      if (cBuffer->capacity() - cBuffer->size() < bytesResampled / sizeof(uint16_t)) {
+        // If buffer exceeds some max size, you could return SWITCH_STATUS_FALSE to abort the transfer
+        // if (cBuffer->size() + std::max(bytesResampled / sizeof(uint16_t), (size_t)BUFFER_GROW_SIZE) > MAX_BUFFER_SIZE) return SWITCH_STATUS_FALSE;
 
-      cBuffer->set_capacity(cBuffer->size() + std::max(bytesResampled / sizeof(uint16_t), (size_t)BUFFER_GROW_SIZE));
+        cBuffer->set_capacity(cBuffer->size() + std::max(bytesResampled / sizeof(uint16_t), (size_t)BUFFER_GROW_SIZE));
+      }
+      // Push the data into the buffer.
+      cBuffer->insert(cBuffer->end(), pcm_data.begin(), pcm_data.end());
+    } catch (const std::exception& e) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error processing incoming binary message: %s\n", e.what());
+      switch_mutex_unlock(tech_pvt->mutex);
+      return SWITCH_STATUS_FALSE;
+    } catch (...) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error processing incoming binary message\n");
+      switch_mutex_unlock(tech_pvt->mutex);
+      return SWITCH_STATUS_FALSE;
     }
-    // Push the data into the buffer.
-    cBuffer->insert(cBuffer->end(), pcm_data.begin(), pcm_data.end());
 
     switch_mutex_unlock(tech_pvt->mutex);
 
