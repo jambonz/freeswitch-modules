@@ -159,14 +159,16 @@ static switch_status_t dub_silence_track(switch_core_session_t *session, char* t
   switch_channel_t *channel = switch_core_session_get_channel(session);
   switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, MY_BUG_NAME);
   switch_status_t status = SWITCH_STATUS_FALSE;
-  
+
+  // DH: I found it is much simpler to implement silence as a sequence of remove and add operations  
   if (bug) {
     struct cap_cb *cb =(struct cap_cb *) switch_core_media_bug_get_user_data(bug);
-    status = silence_dub_track(cb, trackName);
+    status = remove_dub_track(cb, trackName);
     if (status != SWITCH_STATUS_SUCCESS) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "dub_silence_track: error silencing track %s\n", trackName);
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "dub_silence_track: error finding track %s\n", trackName);
       return SWITCH_STATUS_FALSE;
     }
+    status = dub_add_track(session, trackName);
   }
   else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "dub_silence_track: bug not found\n");
