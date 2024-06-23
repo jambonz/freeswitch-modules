@@ -15,11 +15,13 @@ typedef boost::circular_buffer<uint16_t> CircularBuffer_t;
 
 using namespace Microsoft::CognitiveServices::Speech;
 
+static const char* audioLogFile= std::getenv("AZURE_AUDIO_LOGGING");
+
 static std::string fullDirPath;
 
 static void start_synthesis(std::shared_ptr<SpeechSynthesizer> speechSynthesizer, const char* text, azure_t* a) {
     try {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "start_synthesis calling \n");
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "start_synthesis calling, text %s\n", text);
       auto result = std::strncmp(text, "<speak", 6) == 0 ?
         speechSynthesizer->SpeakSsmlAsync(text).get() :
         speechSynthesizer->SpeakTextAsync(text).get();
@@ -43,6 +45,8 @@ static void start_synthesis(std::shared_ptr<SpeechSynthesizer> speechSynthesizer
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "mod_azure_tts: Exception in start_synthesis %s\n",  e.what());
     }
     a->draining = 1;
+
+    free((void*) text);
 }
 
 extern "C" {
@@ -87,14 +91,7 @@ extern "C" {
 
   switch_status_t azure_speech_feed_tts(azure_t* a, char* text, switch_speech_flag_t *flags) {
     const int MAX_CHARS = 20;
-    char tempText[MAX_CHARS + 4]; // +4 for the ellipsis and null terminator
-
-    if (strlen(text) > MAX_CHARS) {
-        strncpy(tempText, text, MAX_CHARS);
-        strcpy(tempText + MAX_CHARS, "...");
-    } else {
-        strcpy(tempText, text);
-    }
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts %s\n", text);
 
     /* open cache file */
     if (a->cache_audio && fullDirPath.length() > 0) {
@@ -168,8 +165,14 @@ extern "C" {
 			speechConfig->SetEndpointId(a->endpointId);
 		}
 
+    if (audioLogFile) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts enabling audio logging to %s\n", audioLogFile);
+      speechConfig->SetProperty(PropertyId::Speech_LogFilename, audioLogFile);
+      speechConfig->EnableAudioLogging();
+    }
+
     try {
-      auto speechSynthesizer = SpeechSynthesizer::FromConfig(speechConfig);
+      auto speechSynthesizer = SpeechSynthesizer::FromConfig(speechConfig, nullptr);
 
       speechSynthesizer->SynthesisStarted += [a](const SpeechSynthesisEventArgs& e) {
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts SynthesisStarted\n");
@@ -266,7 +269,8 @@ extern "C" {
         }
       };
 
-      std::thread(start_synthesis, speechSynthesizer, text, a).detach();
+      const char* dupText = strdup(text); // text will be freed in the thread
+      std::thread(start_synthesis, speechSynthesizer, dupText, a).detach();
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "azure_speech_feed_tts sent synthesize request\n");
     } catch (const std::exception& e) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "mod_azure_tts: Exception: %s\n", e.what());
