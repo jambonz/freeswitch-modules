@@ -141,6 +141,11 @@ int AudioPipe::lws_callback(struct lws *wsi,
           return 0;
         }
         
+        if (ap->m_state == LWS_CLIENT_DISCONNECTING) {
+          lwsl_notice("AudioPipe::lws_service_thread race condition: got incoming message while closing the connection.\n");
+          return 0;
+        }
+
         if (lws_frame_is_binary(wsi)) {
           if (ap->is_bidirectional_audio_stream()) {
             ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::BINARY, NULL, (char *) in, len);
