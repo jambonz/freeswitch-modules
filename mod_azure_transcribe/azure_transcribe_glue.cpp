@@ -391,7 +391,7 @@ private:
 			configuration_stream << "audio_logging;";
 		}
 		configuration_stream << (proxyIP ? proxyIP : "") << ";"
-		  << (proxyPort ? proxyPort : "") << ";"
+			<< (proxyPort ? proxyPort : "") << ";"
 			<< (proxyUsername ? proxyUsername : "") << ";"
 			<< (proxyPassword ? proxyPassword : "") << ";";
 		const char* var;
