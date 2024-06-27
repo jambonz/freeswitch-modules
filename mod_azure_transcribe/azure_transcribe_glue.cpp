@@ -382,21 +382,29 @@ private:
 
 		const char* endpoint = switch_channel_get_variable(channel, "AZURE_SERVICE_ENDPOINT");
 		const char* endpointId = switch_channel_get_variable(channel, "AZURE_SERVICE_ENDPOINT_ID");
-		configuration_stream <<
-			endpoint << ";" <<
-			endpointId << ";";
+		if (endpoint != nullptr) {
+			configuration_stream << endpoint << ";";
+		}
+		if (endpointId != nullptr) {
+			configuration_stream << endpointId << ";";
+		}
 		if (switch_true(switch_channel_get_variable(channel, "AZURE_USE_OUTPUT_FORMAT_DETAILED"))) {
 			configuration_stream << "output_format_detailed;";
 		}
 		if (switch_true(switch_channel_get_variable(channel, "AZURE_AUDIO_LOGGING"))) {
 			configuration_stream << "audio_logging;";
 		}
-		if (nullptr != proxyIP && nullptr != proxyPort) {
-			configuration_stream <<
-				proxyIP << ";" <<
-				proxyPort << ";" <<
-				proxyUsername << ";" <<
-				proxyPassword << ";";
+		if (proxyIP != nullptr) {
+			configuration_stream << proxyIP << ";";
+		}
+		if (proxyPort != nullptr) {
+			configuration_stream << proxyPort << ";";
+		}
+		if (proxyUsername != nullptr) {
+			configuration_stream << proxyUsername << ";";
+		}
+		if (proxyPassword != nullptr) {
+			configuration_stream << proxyPassword << ";";
 		}
 		const char* var;
 		if (var = switch_channel_get_variable(channel, "AZURE_SPEECH_ALTERNATIVE_LANGUAGE_CODES")) {
