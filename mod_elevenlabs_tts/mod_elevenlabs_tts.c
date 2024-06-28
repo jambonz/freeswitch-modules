@@ -19,6 +19,8 @@ static void clearElevenlabs(elevenlabs_t* el, int freeAll) {
   if (el->style) free(el->style);
   if (el->use_speaker_boost) free(el->use_speaker_boost);
   if (el->optimize_streaming_latency) free(el->optimize_streaming_latency);
+  if (el->previous_text) free(el->previous_text);
+  if (el->next_text) free(el->next_text);
   if (el->ct) free(el->ct);
   if (el->reported_latency) free(el->reported_latency);
   if (el->request_id) free(el->request_id);
@@ -36,6 +38,8 @@ static void clearElevenlabs(elevenlabs_t* el, int freeAll) {
   el->style = NULL;
   el->use_speaker_boost = NULL;
   el->optimize_streaming_latency = NULL;
+  el->previous_text = NULL;
+  el->next_text = NULL;
   el->ct = NULL;
   el->reported_latency = NULL;
   el->request_id = NULL;
@@ -173,6 +177,14 @@ static void ell_text_param_tts(switch_speech_handle_t *sh, char *param, const ch
   else if (0 == strcmp(param, "optimize_streaming_latency")) {
     if (el->optimize_streaming_latency) free(el->optimize_streaming_latency);
     el->optimize_streaming_latency = strdup(val);
+  }
+  else if (0 == strcmp(param, "next_text")) {
+    if (el->next_text) free(el->next_text);
+    el->next_text = strdup(val);
+  }
+  else if (0 == strcmp(param, "previous_text")) {
+    if (el->previous_text) free(el->previous_text);
+    el->previous_text = strdup(val);
   }
   else if (0 == strcmp(param, "write_cache_file") && switch_true(val)) {
     el->cache_audio = 1;
