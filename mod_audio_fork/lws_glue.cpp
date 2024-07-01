@@ -38,7 +38,6 @@ namespace {
   static uint32_t playCount = 0;
 
   switch_status_t processIncomingBinary(private_t* tech_pvt, switch_core_session_t* session, const char* message, size_t dataLength) {
-    CircularBuffer_t *cBuffer = (CircularBuffer_t *) tech_pvt->circularBuffer;
     uint8_t* data = reinterpret_cast<uint8_t*>(const_cast<char*>(message));
     uint16_t* data_uint16 = reinterpret_cast<uint16_t*>(data);
     std::vector<uint16_t> pcm_data(data_uint16, data_uint16 + dataLength / sizeof(uint16_t));
@@ -70,32 +69,34 @@ namespace {
       return SWITCH_STATUS_FALSE;
     }
 
-    switch_mutex_lock(tech_pvt->mutex);
+    if (nullptr != tech_pvt->mutex && switch_mutex_trylock(tech_pvt->mutex) == SWITCH_STATUS_SUCCESS) {
+      //switch_mutex_lock(tech_pvt->mutex);
+      CircularBuffer_t *cBuffer = (CircularBuffer_t *) tech_pvt->circularBuffer;
 
-    try {
-      // Resize the buffer if necessary
-      size_t bytesResampled = pcm_data.size() * sizeof(uint16_t);
-      if (cBuffer->capacity() - cBuffer->size() < bytesResampled / sizeof(uint16_t)) {
-        // If buffer exceeds some max size, you could return SWITCH_STATUS_FALSE to abort the transfer
-        // if (cBuffer->size() + std::max(bytesResampled / sizeof(uint16_t), (size_t)BUFFER_GROW_SIZE) > MAX_BUFFER_SIZE) return SWITCH_STATUS_FALSE;
+      try {
+        // Resize the buffer if necessary
+        size_t bytesResampled = pcm_data.size() * sizeof(uint16_t);
+        if (cBuffer->capacity() - cBuffer->size() < bytesResampled / sizeof(uint16_t)) {
+          // If buffer exceeds some max size, you could return SWITCH_STATUS_FALSE to abort the transfer
+          // if (cBuffer->size() + std::max(bytesResampled / sizeof(uint16_t), (size_t)BUFFER_GROW_SIZE) > MAX_BUFFER_SIZE) return SWITCH_STATUS_FALSE;
 
-        cBuffer->set_capacity(cBuffer->size() + std::max(bytesResampled / sizeof(uint16_t), (size_t)BUFFER_GROW_SIZE));
+          cBuffer->set_capacity(cBuffer->size() + std::max(bytesResampled / sizeof(uint16_t), (size_t)BUFFER_GROW_SIZE));
+        }
+        // Push the data into the buffer.
+        cBuffer->insert(cBuffer->end(), pcm_data.begin(), pcm_data.end());
+      } catch (const std::exception& e) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error processing incoming binary message: %s\n", e.what());
+        switch_mutex_unlock(tech_pvt->mutex);
+        return SWITCH_STATUS_FALSE;
+      } catch (...) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error processing incoming binary message\n");
+        switch_mutex_unlock(tech_pvt->mutex);
+        return SWITCH_STATUS_FALSE;
       }
-      // Push the data into the buffer.
-      cBuffer->insert(cBuffer->end(), pcm_data.begin(), pcm_data.end());
-    } catch (const std::exception& e) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error processing incoming binary message: %s\n", e.what());
       switch_mutex_unlock(tech_pvt->mutex);
-      return SWITCH_STATUS_FALSE;
-    } catch (...) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error processing incoming binary message\n");
-      switch_mutex_unlock(tech_pvt->mutex);
-      return SWITCH_STATUS_FALSE;
+      return SWITCH_STATUS_SUCCESS;
     }
-
-    switch_mutex_unlock(tech_pvt->mutex);
-
-    return SWITCH_STATUS_SUCCESS;
+    return SWITCH_STATUS_FALSE;
 }
 
   void processIncomingMessage(private_t* tech_pvt, switch_core_session_t* session, const char* message) {
