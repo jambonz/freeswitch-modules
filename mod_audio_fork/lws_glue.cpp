@@ -104,7 +104,7 @@ namespace {
     std::string type;
     cJSON* json = parse_json(session, msg, type) ;
     if (json) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) processIncomingMessage - received %s message\n", tech_pvt->id, type.c_str());
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) processIncomingMessage - received %s message %s\n", tech_pvt->id, type.c_str(), message);
       cJSON* jsonData = cJSON_GetObjectItem(json, "data");
       if (0 == type.compare("playAudio") &&
         // playAudio is enabled and there is no bidirectional audio from stream is enabled.
@@ -735,6 +735,7 @@ extern "C" {
 
       // if flag was set to clear the buffer, do so and clear the flag
       if (tech_pvt->clear_bidirectional_audio_buffer) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) dub_speech_frame - clearing buffer\n", tech_pvt->id); 
         cBuffer->clear();
         tech_pvt->clear_bidirectional_audio_buffer = 0;
       }
@@ -759,8 +760,8 @@ extern "C" {
         vector_normalize(fp, rframe->samples);
 
         switch_core_media_bug_set_write_replace_frame(bug, rframe);
-        switch_mutex_unlock(tech_pvt->mutex);
       }
+      switch_mutex_unlock(tech_pvt->mutex);
     }
     return SWITCH_TRUE;
   }
