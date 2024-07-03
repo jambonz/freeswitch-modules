@@ -104,7 +104,7 @@ namespace {
     std::string type;
     cJSON* json = parse_json(session, msg, type) ;
     if (json) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) processIncomingMessage - received %s message\n", tech_pvt->id, type.c_str());
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) processIncomingMessage - received %s message %s\n", tech_pvt->id, type.c_str(), message);
       cJSON* jsonData = cJSON_GetObjectItem(json, "data");
       if (0 == type.compare("playAudio") &&
         // playAudio is enabled and there is no bidirectional audio from stream is enabled.
@@ -191,6 +191,9 @@ namespace {
         // kill any current playback on the channel
         switch_channel_t *channel = switch_core_session_get_channel(session);
         switch_channel_set_flag_value(channel, CF_BREAK, 2);
+
+        // this will dump buffered incoming audio
+        tech_pvt->clear_bidirectional_audio_buffer = 1;
       }
       else if (0 == type.compare("transcription")) {
         char* jsonString = cJSON_PrintUnformatted(jsonData);
@@ -314,6 +317,7 @@ namespace {
     tech_pvt->bidirectional_audio_enable = bidirectional_audio_enable;
     tech_pvt->bidirectional_audio_stream = bidirectional_audio_stream;
     tech_pvt->bidirectional_audio_sample_rate = bidirectional_audio_sample_rate;
+    tech_pvt->clear_bidirectional_audio_buffer = 0;
     strncpy(tech_pvt->bugname, bugname, MAX_BUG_LEN);
     if (metadata) strncpy(tech_pvt->initialMetadata, metadata, MAX_METADATA_LEN);
     
@@ -728,26 +732,35 @@ extern "C" {
   switch_bool_t dub_speech_frame(switch_media_bug_t *bug, private_t* tech_pvt) {
     CircularBuffer_t *cBuffer = (CircularBuffer_t *) tech_pvt->circularBuffer;
     if (switch_mutex_trylock(tech_pvt->mutex) == SWITCH_STATUS_SUCCESS) {
-      switch_frame_t* rframe = switch_core_media_bug_get_write_replace_frame(bug);
-      int16_t *fp = reinterpret_cast<int16_t*>(rframe->data);
 
-      rframe->channels = 1;
-      rframe->datalen = rframe->samples * sizeof(int16_t);
-
-      int16_t data[SWITCH_RECOMMENDED_BUFFER_SIZE];
-      memset(data, 0, sizeof(data));
-
-      int samplesToCopy = std::min(static_cast<int>(cBuffer->size()), static_cast<int>(rframe->samples));
-
-      std::copy_n(cBuffer->begin(), samplesToCopy, data);
-      cBuffer->erase(cBuffer->begin(), cBuffer->begin() + samplesToCopy);
-
-      if (samplesToCopy > 0) {
-        vector_add(fp, data, rframe->samples);
+      // if flag was set to clear the buffer, do so and clear the flag
+      if (tech_pvt->clear_bidirectional_audio_buffer) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) dub_speech_frame - clearing buffer\n", tech_pvt->id); 
+        cBuffer->clear();
+        tech_pvt->clear_bidirectional_audio_buffer = 0;
       }
-      vector_normalize(fp, rframe->samples);
+      else {
+        switch_frame_t* rframe = switch_core_media_bug_get_write_replace_frame(bug);
+        int16_t *fp = reinterpret_cast<int16_t*>(rframe->data);
 
-      switch_core_media_bug_set_write_replace_frame(bug, rframe);
+        rframe->channels = 1;
+        rframe->datalen = rframe->samples * sizeof(int16_t);
+
+        int16_t data[SWITCH_RECOMMENDED_BUFFER_SIZE];
+        memset(data, 0, sizeof(data));
+
+        int samplesToCopy = std::min(static_cast<int>(cBuffer->size()), static_cast<int>(rframe->samples));
+
+        std::copy_n(cBuffer->begin(), samplesToCopy, data);
+        cBuffer->erase(cBuffer->begin(), cBuffer->begin() + samplesToCopy);
+
+        if (samplesToCopy > 0) {
+          vector_add(fp, data, rframe->samples);
+        }
+        vector_normalize(fp, rframe->samples);
+
+        switch_core_media_bug_set_write_replace_frame(bug, rframe);
+      }
       switch_mutex_unlock(tech_pvt->mutex);
     }
     return SWITCH_TRUE;
