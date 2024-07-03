@@ -57,6 +57,7 @@ struct private_data {
   int bidirectional_audio_enable;
 	int bidirectional_audio_stream;
   int bidirectional_audio_sample_rate;
+  int clear_bidirectional_audio_buffer;
 };
 
 typedef struct private_data private_t;
