@@ -142,7 +142,13 @@ public:
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(psession), SWITCH_LOG_DEBUG, "setting SpeechServiceConnection_LanguageIdMode to %s \n", languageIdMode);
 			properties.SetProperty(PropertyId::SpeechServiceConnection_LanguageIdMode, languageIdMode);
 		}
-
+		//https://learn.microsoft.com/en-us/javascript/api/microsoft-cognitiveservices-speech-sdk/propertyid?view=azure-node-latest
+		//PropertyId::SpeechServiceResponse_PostProcessingOption
+ 		const char* postProcessingOption = switch_channel_get_variable(channel, "AZURE_POST_PROCESSING_OPTION");
+		if (postProcessingOption) {
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(psession), SWITCH_LOG_DEBUG, "setting SpeechServiceResponse_PostProcessingOption to %s \n", postProcessingOption);
+			properties.SetProperty(PropertyId::SpeechServiceResponse_PostProcessingOption, postProcessingOption);
+		}
 		// recognition mode - readonly according to Azure docs: 
 		// https://docs.microsoft.com/en-us/javascript/api/microsoft-cognitiveservices-speech-sdk/propertyid?view=azure-node-latest
 		/*
