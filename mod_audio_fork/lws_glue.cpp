@@ -21,11 +21,17 @@
 
 #include <boost/circular_buffer.hpp>
 
+/*
+#include <fstream>
+
+std::ofstream logFile16;
+std::ofstream logFile8;
+*/
 typedef boost::circular_buffer<uint16_t> CircularBuffer_t;
 
 #define RTP_PACKETIZATION_PERIOD 20
 #define FRAME_SIZE_8000  320 /*which means each 20ms frame as 320 bytes at 8 khz (1 channel only)*/
-#define BUFFER_GROW_SIZE (8192)
+#define BUFFER_GROW_SIZE (16384)
 
 namespace {
   static const char *requestedBufferSecs = std::getenv("MOD_AUDIO_FORK_BUFFER_SECS");
@@ -37,29 +43,109 @@ namespace {
   static unsigned int idxCallCount = 0;
   static uint32_t playCount = 0;
 
+/*
+  void initializeLogging() {
+      logFile16.open("/tmp/bidirectional_audio-16k.raw", std::ios::out | std::ios::binary); // Open in binary mode
+      if (!logFile16.is_open()) {
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to open file for writing: /tmp/bidirectional_audio-16.raw\n");
+      }
+      logFile8.open("/tmp/bidirectional_audio-8k.raw", std::ios::out | std::ios::binary); // Open in binary mode
+      if (!logFile8.is_open()) {
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to open file for writing: /tmp/bidirectional_audio-8.raw\n");
+      }
+  }
+*/
   switch_status_t processIncomingBinary(private_t* tech_pvt, switch_core_session_t* session, const char* message, size_t dataLength) {
-    uint8_t* data = reinterpret_cast<uint8_t*>(const_cast<char*>(message));
-    uint16_t* data_uint16 = reinterpret_cast<uint16_t*>(data);
-    std::vector<uint16_t> pcm_data(data_uint16, data_uint16 + dataLength / sizeof(uint16_t));
+    std::vector<uint8_t> data;
+
+    // TMP!!
+    /*
+    if (logFile16.is_open()) {
+        logFile16.write(message, dataLength);
+    }
+    */
+    // Prepend the set-aside byte if there is one
+    if (tech_pvt->has_set_aside_byte) {
+        data.push_back(tech_pvt->set_aside_byte);
+        tech_pvt->has_set_aside_byte = false;
+    }
+
+    // Append the new incoming message
+    data.insert(data.end(), message, message + dataLength);
+
+    // Check if the total data length is now odd
+    if (data.size() % 2 != 0) {
+        // Set aside the last byte
+        tech_pvt->set_aside_byte = data.back();
+        tech_pvt->has_set_aside_byte = true;
+        data.pop_back(); // Remove the last byte from the data vector
+    }
+
+    // Convert the data to 16-bit elements
+    const uint16_t* data_uint16 = reinterpret_cast<const uint16_t*>(data.data());
+    size_t numSamples = data.size() / sizeof(uint16_t);
+
+    // Access the prebuffer
+    CircularBuffer_t* cBuffer = static_cast<CircularBuffer_t*>(tech_pvt->streamingPreBuffer);
+
+    // Ensure the prebuffer has enough capacity
+    if (cBuffer->capacity() - cBuffer->size() < numSamples) {
+        size_t newCapacity = cBuffer->size() + std::max(numSamples, (size_t)BUFFER_GROW_SIZE);
+        cBuffer->set_capacity(newCapacity);
+    }
+
+    // Append the data to the prebuffer
+    cBuffer->insert(cBuffer->end(), data_uint16, data_uint16 + numSamples);
+    //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Appended %zu 16-bit samples to the prebuffer.\n", numSamples);
+
+    // if we haven't reached threshold amount of prebuffered data, return
+    if (cBuffer->size() < tech_pvt->streamingPreBufSize) {
+        //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Prebuffered data is below threshold %u, returning.\n", tech_pvt->streamingPreBufSize);
+        return SWITCH_STATUS_SUCCESS;
+    }
+
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Prebuffered data samples %u is above threshold %u, prepare to playout.\n", 
+      cBuffer->size(), tech_pvt->streamingPreBufSize);
+
+    // Check for downsampling factor
+    size_t downsample_factor = tech_pvt->downscale_factor;
+
+    // Calculate the number of samples that can be evenly divided by the downsample factor
+    size_t numCompleteSamples = (cBuffer->size() / downsample_factor) * downsample_factor;
+
+    // Handle leftover samples
+    std::vector<uint16_t> leftoverSamples;
+    size_t numLeftoverSamples = cBuffer->size() - numCompleteSamples;
+    if (numLeftoverSamples > 0) {
+        leftoverSamples.assign(cBuffer->end() - numLeftoverSamples, cBuffer->end());
+        cBuffer->resize(numCompleteSamples);
+        //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Temporarily removing %u leftover samples due to downsampling.\n", numLeftoverSamples);
+    }
 
     // resample if necessary
+    std::vector<int16_t> out;
     try {
       if (tech_pvt->bidirectional_audio_resampler) {
-        std::vector<int16_t> in(pcm_data.begin(), pcm_data.end());
+        // Improvement: Use assign to convert circular buffer to vector for resampling
+        std::vector<int16_t> in;
+        in.assign(cBuffer->begin(), cBuffer->end()); 
+        out.resize(in.size() * 6); // max upsampling would be from 8k -> 48k
 
-        std::vector<int16_t> out(dataLength);
-        spx_uint32_t in_len = pcm_data.size();
+        spx_uint32_t in_len = in.size();
         spx_uint32_t out_len = out.size();
+
+        //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Resampling %u samples into a buffer that can hold %u samples\n", in.size(), out_len);
+
         speex_resampler_process_interleaved_int(tech_pvt->bidirectional_audio_resampler, in.data(), &in_len, out.data(), &out_len);
 
-        if (out_len > out.size()) {
-          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CRIT, "Resampler output exceeded maximum buffer size!\n");
-          return SWITCH_STATUS_FALSE;
-        }
+        // Resize the output buffer to match the output length from resampler
+        //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Resizing output buffer from %u to %u samples\n", in.size(), out_len);
 
-        // Resize the pcm_data to match the output length from resampler, and then copy the resampled data into it.
-        pcm_data.resize(out_len);
-        memcpy(pcm_data.data(), out.data(), out_len * sizeof(int16_t));
+        out.resize(out_len);
+      }
+      else {
+        // If no resampling is needed, copy the data from the prebuffer to the output buffer
+        out.assign(cBuffer->begin(), cBuffer->end());
       }
     } catch (const std::exception& e) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error resampling incoming binary message: %s\n", e.what());
@@ -69,35 +155,49 @@ namespace {
       return SWITCH_STATUS_FALSE;
     }
 
+/*
+    if (logFile8.is_open()) {
+        logFile8.write(reinterpret_cast<const char*>(out.data()), out.size() * sizeof(uint16_t));
+    }
+*/
     if (nullptr != tech_pvt->mutex && switch_mutex_trylock(tech_pvt->mutex) == SWITCH_STATUS_SUCCESS) {
-      //switch_mutex_lock(tech_pvt->mutex);
-      CircularBuffer_t *cBuffer = (CircularBuffer_t *) tech_pvt->circularBuffer;
+      CircularBuffer_t *playoutBuffer = (CircularBuffer_t *) tech_pvt->streamingPlayoutBuffer;
 
       try {
         // Resize the buffer if necessary
-        size_t bytesResampled = pcm_data.size() * sizeof(uint16_t);
-        if (cBuffer->capacity() - cBuffer->size() < bytesResampled / sizeof(uint16_t)) {
-          // If buffer exceeds some max size, you could return SWITCH_STATUS_FALSE to abort the transfer
-          // if (cBuffer->size() + std::max(bytesResampled / sizeof(uint16_t), (size_t)BUFFER_GROW_SIZE) > MAX_BUFFER_SIZE) return SWITCH_STATUS_FALSE;
-
-          cBuffer->set_capacity(cBuffer->size() + std::max(bytesResampled / sizeof(uint16_t), (size_t)BUFFER_GROW_SIZE));
+        if (playoutBuffer->capacity() - playoutBuffer->size() < out.size()) {
+          size_t newCapacity = playoutBuffer->size() + std::max(out.size(), (size_t)BUFFER_GROW_SIZE);
+          playoutBuffer->set_capacity(newCapacity);
+          //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Resized playout buffer to new capacity: %zu\n", newCapacity);
         }
         // Push the data into the buffer.
-        cBuffer->insert(cBuffer->end(), pcm_data.begin(), pcm_data.end());
+        playoutBuffer->insert(playoutBuffer->end(), out.begin(), out.end());
+        //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Appended %zu 16-bit samples to the playout buffer.\n", out.size());
       } catch (const std::exception& e) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error processing incoming binary message: %s\n", e.what());
         switch_mutex_unlock(tech_pvt->mutex);
+        cBuffer->clear();
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error processing incoming binary message: %s\n", e.what());
         return SWITCH_STATUS_FALSE;
       } catch (...) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error processing incoming binary message\n");
         switch_mutex_unlock(tech_pvt->mutex);
+        cBuffer->clear();
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error processing incoming binary message\n");
         return SWITCH_STATUS_FALSE;
       }
       switch_mutex_unlock(tech_pvt->mutex);
+      cBuffer->clear();
+
+      // Put the leftover samples back in the prebuffer for the next time
+      if (!leftoverSamples.empty()) {
+          cBuffer->insert(cBuffer->end(), leftoverSamples.begin(), leftoverSamples.end());
+          //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Put back %u leftover samples into the prebuffer.\n", leftoverSamples.size());
+      }
       return SWITCH_STATUS_SUCCESS;
     }
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "returning SWITCH_STATUS_FALSE, aborting transfer\n");
+
     return SWITCH_STATUS_FALSE;
-}
+  }
 
   void processIncomingMessage(private_t* tech_pvt, switch_core_session_t* session, const char* message) {
     std::string msg = message;
@@ -193,7 +293,7 @@ namespace {
         switch_channel_set_flag_value(channel, CF_BREAK, 2);
 
         // this will dump buffered incoming audio
-        tech_pvt->clear_bidirectional_audio_buffer = 1;
+        tech_pvt->clear_bidirectional_audio_buffer = true;
       }
       else if (0 == type.compare("transcription")) {
         char* jsonString = cJSON_PrintUnformatted(jsonData);
@@ -313,11 +413,20 @@ namespace {
     tech_pvt->buffer_overrun_notified = 0;
     tech_pvt->audio_paused = 0;
     tech_pvt->graceful_shutdown = 0;
-    tech_pvt->circularBuffer = (void *) new CircularBuffer_t(8192);
+    tech_pvt->streamingPlayoutBuffer = (void *) new CircularBuffer_t(8192);
     tech_pvt->bidirectional_audio_enable = bidirectional_audio_enable;
     tech_pvt->bidirectional_audio_stream = bidirectional_audio_stream;
     tech_pvt->bidirectional_audio_sample_rate = bidirectional_audio_sample_rate;
-    tech_pvt->clear_bidirectional_audio_buffer = 0;
+    tech_pvt->clear_bidirectional_audio_buffer = false;
+    tech_pvt->has_set_aside_byte = 0;
+    tech_pvt->downscale_factor = 1;
+    if (bidirectional_audio_sample_rate > sampling) {
+      tech_pvt->downscale_factor = bidirectional_audio_sample_rate / sampling;
+      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "downscale_factor is %d\n", tech_pvt->downscale_factor);
+    }
+    tech_pvt->streamingPreBufSize = 320 * tech_pvt->downscale_factor * 5; // min 100ms prebuffer
+    tech_pvt->streamingPreBuffer = (void *) new CircularBuffer_t(8192);
+
     strncpy(tech_pvt->bugname, bugname, MAX_BUG_LEN);
     if (metadata) strncpy(tech_pvt->initialMetadata, metadata, MAX_METADATA_LEN);
     
@@ -347,13 +456,15 @@ namespace {
     }
 
     if (bidirectional_audio_sample_rate && sampling != bidirectional_audio_sample_rate) {
-      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "(%u) bidirectional audio resampling from %u to %u\n", tech_pvt->id, bidirectional_audio_sample_rate, sampling);
-      tech_pvt->bidirectional_audio_resampler = speex_resampler_init(channels, bidirectional_audio_sample_rate, sampling, SWITCH_RESAMPLE_QUALITY, &err);
+      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "(%u) bidirectional audio resampling from %u to %u, channels %d\n", tech_pvt->id, bidirectional_audio_sample_rate, sampling, channels);
+      tech_pvt->bidirectional_audio_resampler = speex_resampler_init(1, bidirectional_audio_sample_rate, sampling, SWITCH_RESAMPLE_QUALITY, &err);
       if (0 != err) {
         switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Error initializing bidirectional audio resampler: %s.\n", speex_resampler_strerror(err));
         return SWITCH_STATUS_FALSE;
       }
     }
+
+    initializeLogging();
 
     switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "(%u) fork_data_init\n", tech_pvt->id);
 
@@ -374,10 +485,15 @@ namespace {
       switch_mutex_destroy(tech_pvt->mutex);
       tech_pvt->mutex = nullptr;
     }
-    if (tech_pvt->circularBuffer) {
-      CircularBuffer_t *cBuffer = (CircularBuffer_t *) tech_pvt->circularBuffer;
+    if (tech_pvt->streamingPlayoutBuffer) {
+      CircularBuffer_t *cBuffer = (CircularBuffer_t *) tech_pvt->streamingPlayoutBuffer;
       delete cBuffer;
-      tech_pvt->circularBuffer = nullptr;
+      tech_pvt->streamingPlayoutBuffer = nullptr;
+    }
+    if (tech_pvt->streamingPreBuffer) {
+      CircularBuffer_t *cBuffer = (CircularBuffer_t *) tech_pvt->streamingPreBuffer;
+      delete cBuffer;
+      tech_pvt->streamingPreBuffer = nullptr;
     }
   }
 
@@ -730,14 +846,14 @@ extern "C" {
   }
 
   switch_bool_t dub_speech_frame(switch_media_bug_t *bug, private_t* tech_pvt) {
-    CircularBuffer_t *cBuffer = (CircularBuffer_t *) tech_pvt->circularBuffer;
+    CircularBuffer_t *cBuffer = (CircularBuffer_t *) tech_pvt->streamingPlayoutBuffer;
     if (switch_mutex_trylock(tech_pvt->mutex) == SWITCH_STATUS_SUCCESS) {
 
       // if flag was set to clear the buffer, do so and clear the flag
       if (tech_pvt->clear_bidirectional_audio_buffer) {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) dub_speech_frame - clearing buffer\n", tech_pvt->id); 
         cBuffer->clear();
-        tech_pvt->clear_bidirectional_audio_buffer = 0;
+        tech_pvt->clear_bidirectional_audio_buffer = false;
       }
       else {
         switch_frame_t* rframe = switch_core_media_bug_get_write_replace_frame(bug);
@@ -750,6 +866,8 @@ extern "C" {
         memset(data, 0, sizeof(data));
 
         int samplesToCopy = std::min(static_cast<int>(cBuffer->size()), static_cast<int>(rframe->samples));
+
+        //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) dub_speech_frame - samples to copy %u\n", tech_pvt->id, samplesToCopy); 
 
         std::copy_n(cBuffer->begin(), samplesToCopy, data);
         cBuffer->erase(cBuffer->begin(), cBuffer->begin() + samplesToCopy);
@@ -775,7 +893,7 @@ extern "C" {
     }
     private_t* tech_pvt = (private_t*) switch_core_media_bug_get_user_data(bug);
 
-    CircularBuffer_t *cBuffer = (CircularBuffer_t *) tech_pvt->circularBuffer;
+    CircularBuffer_t *cBuffer = (CircularBuffer_t *) tech_pvt->streamingPlayoutBuffer;
 
     if (switch_mutex_trylock(tech_pvt->mutex) == SWITCH_STATUS_SUCCESS) {
       if (cBuffer != nullptr) {
