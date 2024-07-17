@@ -464,7 +464,7 @@ namespace {
       }
     }
 
-    initializeLogging();
+    //initializeLogging();
 
     switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "(%u) fork_data_init\n", tech_pvt->id);
 
