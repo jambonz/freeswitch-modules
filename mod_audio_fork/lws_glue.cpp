@@ -21,12 +21,11 @@
 
 #include <boost/circular_buffer.hpp>
 
-/*
 #include <fstream>
 
 std::ofstream logFile16;
 std::ofstream logFile8;
-*/
+
 typedef boost::circular_buffer<uint16_t> CircularBuffer_t;
 
 #define RTP_PACKETIZATION_PERIOD 20
@@ -43,7 +42,6 @@ namespace {
   static unsigned int idxCallCount = 0;
   static uint32_t playCount = 0;
 
-/*
   void initializeLogging() {
       logFile16.open("/tmp/bidirectional_audio-16k.raw", std::ios::out | std::ios::binary); // Open in binary mode
       if (!logFile16.is_open()) {
@@ -54,16 +52,14 @@ namespace {
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to open file for writing: /tmp/bidirectional_audio-8.raw\n");
       }
   }
-*/
+
   switch_status_t processIncomingBinary(private_t* tech_pvt, switch_core_session_t* session, const char* message, size_t dataLength) {
     std::vector<uint8_t> data;
 
     // TMP!!
-    /*
     if (logFile16.is_open()) {
         logFile16.write(message, dataLength);
     }
-    */
     // Prepend the set-aside byte if there is one
     if (tech_pvt->has_set_aside_byte) {
         data.push_back(tech_pvt->set_aside_byte);
@@ -96,11 +92,11 @@ namespace {
 
     // Append the data to the prebuffer
     cBuffer->insert(cBuffer->end(), data_uint16, data_uint16 + numSamples);
-    //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Appended %zu 16-bit samples to the prebuffer.\n", numSamples);
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Appended %zu 16-bit samples to the prebuffer.\n", numSamples);
 
     // if we haven't reached threshold amount of prebuffered data, return
     if (cBuffer->size() < tech_pvt->streamingPreBufSize) {
-        //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Prebuffered data is below threshold %u, returning.\n", tech_pvt->streamingPreBufSize);
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Prebuffered data is below threshold %u, returning.\n", tech_pvt->streamingPreBufSize);
         return SWITCH_STATUS_SUCCESS;
     }
 
@@ -119,7 +115,7 @@ namespace {
     if (numLeftoverSamples > 0) {
         leftoverSamples.assign(cBuffer->end() - numLeftoverSamples, cBuffer->end());
         cBuffer->resize(numCompleteSamples);
-        //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Temporarily removing %u leftover samples due to downsampling.\n", numLeftoverSamples);
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Temporarily removing %u leftover samples due to downsampling.\n", numLeftoverSamples);
     }
 
     // resample if necessary
@@ -134,12 +130,12 @@ namespace {
         spx_uint32_t in_len = in.size();
         spx_uint32_t out_len = out.size();
 
-        //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Resampling %u samples into a buffer that can hold %u samples\n", in.size(), out_len);
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Resampling %u samples into a buffer that can hold %u samples\n", in.size(), out_len);
 
         speex_resampler_process_interleaved_int(tech_pvt->bidirectional_audio_resampler, in.data(), &in_len, out.data(), &out_len);
 
         // Resize the output buffer to match the output length from resampler
-        //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Resizing output buffer from %u to %u samples\n", in.size(), out_len);
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Resizing output buffer from %u to %u samples\n", in.size(), out_len);
 
         out.resize(out_len);
       }
@@ -155,11 +151,11 @@ namespace {
       return SWITCH_STATUS_FALSE;
     }
 
-/*
+
     if (logFile8.is_open()) {
         logFile8.write(reinterpret_cast<const char*>(out.data()), out.size() * sizeof(uint16_t));
     }
-*/
+
     if (nullptr != tech_pvt->mutex && switch_mutex_trylock(tech_pvt->mutex) == SWITCH_STATUS_SUCCESS) {
       CircularBuffer_t *playoutBuffer = (CircularBuffer_t *) tech_pvt->streamingPlayoutBuffer;
 
@@ -168,11 +164,11 @@ namespace {
         if (playoutBuffer->capacity() - playoutBuffer->size() < out.size()) {
           size_t newCapacity = playoutBuffer->size() + std::max(out.size(), (size_t)BUFFER_GROW_SIZE);
           playoutBuffer->set_capacity(newCapacity);
-          //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Resized playout buffer to new capacity: %zu\n", newCapacity);
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Resized playout buffer to new capacity: %zu\n", newCapacity);
         }
         // Push the data into the buffer.
         playoutBuffer->insert(playoutBuffer->end(), out.begin(), out.end());
-        //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Appended %zu 16-bit samples to the playout buffer.\n", out.size());
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Appended %zu 16-bit samples to the playout buffer.\n", out.size());
       } catch (const std::exception& e) {
         switch_mutex_unlock(tech_pvt->mutex);
         cBuffer->clear();
@@ -190,7 +186,7 @@ namespace {
       // Put the leftover samples back in the prebuffer for the next time
       if (!leftoverSamples.empty()) {
           cBuffer->insert(cBuffer->end(), leftoverSamples.begin(), leftoverSamples.end());
-          //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Put back %u leftover samples into the prebuffer.\n", leftoverSamples.size());
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Put back %u leftover samples into the prebuffer.\n", leftoverSamples.size());
       }
       return SWITCH_STATUS_SUCCESS;
     }
@@ -464,7 +460,7 @@ namespace {
       }
     }
 
-    //initializeLogging();
+    initializeLogging();
 
     switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "(%u) fork_data_init\n", tech_pvt->id);
 
