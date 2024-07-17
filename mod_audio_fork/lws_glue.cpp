@@ -169,8 +169,6 @@ namespace {
       }
       return SWITCH_STATUS_SUCCESS;
     }
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "processIncomingBinary: temporarily failed to grab mutex (this is not an error)\n");
-
     return SWITCH_STATUS_SUCCESS;
   }
 
