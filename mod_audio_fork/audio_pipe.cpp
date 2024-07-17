@@ -73,7 +73,7 @@ int AudioPipe::lws_callback(struct lws *wsi,
       break;
 
     case LWS_CALLBACK_WS_CLIENT_DROP_PROTOCOL:
-      lwsl_error("AudioPipe::lws_service_thread LWS_CALLBACK_WS_CLIENT_DROP_PROTOCOL\n");
+      lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_WS_CLIENT_DROP_PROTOCOL\n");
       break;
 
     case LWS_CALLBACK_EVENT_WAIT_CANCELLED:
