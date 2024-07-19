@@ -151,55 +151,58 @@ int AudioPipe::lws_callback(struct lws *wsi,
         }
 
         if (lws_frame_is_binary(wsi)) {
-          if (ap->is_bidirectional_audio_stream()) {
+          if (len > 0 && ap->is_bidirectional_audio_stream()) {
             ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::BINARY, NULL, (char *) in, len);
-          } else {
-            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE received binary frame, discarding.\n");
-          }
-          return 0;
-        }
-
-        if (lws_is_first_fragment(wsi)) {
-          // allocate a buffer for the entire chunk of memory needed
-          assert(nullptr == ap->m_recv_buf);
-          ap->m_recv_buf_len = len + lws_remaining_packet_payload(wsi);
-          ap->m_recv_buf = (uint8_t*) malloc(ap->m_recv_buf_len);
-          ap->m_recv_buf_ptr = ap->m_recv_buf;
-        }
-
-        size_t write_offset = ap->m_recv_buf_ptr - ap->m_recv_buf;
-        size_t remaining_space = ap->m_recv_buf_len - write_offset;
-        if (remaining_space < len) {
-          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO,"AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE buffer realloc needed.\n");
-          size_t newlen = ap->m_recv_buf_len + RECV_BUF_REALLOC_SIZE;
-          if (newlen > MAX_RECV_BUF_SIZE) {
-            free(ap->m_recv_buf);
-            ap->m_recv_buf = ap->m_recv_buf_ptr = nullptr;
-            ap->m_recv_buf_len = 0;
-            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO,"AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE max buffer exceeded, truncating message.\n");
+          } else if (len > 0) {
+            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE received unexpected binary frame, discarding.\n");
           }
           else {
-            ap->m_recv_buf = (uint8_t*) realloc(ap->m_recv_buf, newlen);
-            if (nullptr != ap->m_recv_buf) {
-              ap->m_recv_buf_len = newlen;
-              ap->m_recv_buf_ptr = ap->m_recv_buf + write_offset;
-            }
+            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG,"AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE received zero length binary frame, discarding.\n");
           }
         }
-
-        if (nullptr != ap->m_recv_buf) {
-          if (len > 0) {
-            memcpy(ap->m_recv_buf_ptr, in, len);
-            ap->m_recv_buf_ptr += len;
+        else {
+          if (lws_is_first_fragment(wsi)) {
+            // allocate a buffer for the entire chunk of memory needed
+            assert(nullptr == ap->m_recv_buf);
+            ap->m_recv_buf_len = len + lws_remaining_packet_payload(wsi);
+            ap->m_recv_buf = (uint8_t*) malloc(ap->m_recv_buf_len);
+            ap->m_recv_buf_ptr = ap->m_recv_buf;
           }
-          if (lws_is_final_fragment(wsi)) {
-            if (nullptr != ap->m_recv_buf) {
-              std::string msg((char *)ap->m_recv_buf, ap->m_recv_buf_ptr - ap->m_recv_buf);
-              ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::MESSAGE, msg.c_str(), NULL, len);
-              if (nullptr != ap->m_recv_buf) free(ap->m_recv_buf);
+
+          size_t write_offset = ap->m_recv_buf_ptr - ap->m_recv_buf;
+          size_t remaining_space = ap->m_recv_buf_len - write_offset;
+          if (remaining_space < len) {
+            //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO,"AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE buffer realloc needed.\n");
+            size_t newlen = ap->m_recv_buf_len + RECV_BUF_REALLOC_SIZE;
+            if (newlen > MAX_RECV_BUF_SIZE) {
+              free(ap->m_recv_buf);
+              ap->m_recv_buf = ap->m_recv_buf_ptr = nullptr;
+              ap->m_recv_buf_len = 0;
+              switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE max buffer exceeded, truncating message.\n");
             }
-            ap->m_recv_buf = ap->m_recv_buf_ptr = nullptr;
-            ap->m_recv_buf_len = 0;
+            else {
+              ap->m_recv_buf = (uint8_t*) realloc(ap->m_recv_buf, newlen);
+              if (nullptr != ap->m_recv_buf) {
+                ap->m_recv_buf_len = newlen;
+                ap->m_recv_buf_ptr = ap->m_recv_buf + write_offset;
+              }
+            }
+          }
+
+          if (nullptr != ap->m_recv_buf) {
+            if (len > 0) {
+              memcpy(ap->m_recv_buf_ptr, in, len);
+              ap->m_recv_buf_ptr += len;
+            }
+            if (lws_is_final_fragment(wsi)) {
+              if (nullptr != ap->m_recv_buf) {
+                std::string msg((char *)ap->m_recv_buf, ap->m_recv_buf_ptr - ap->m_recv_buf);
+                ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::MESSAGE, msg.c_str(), NULL, len);
+                if (nullptr != ap->m_recv_buf) free(ap->m_recv_buf);
+              }
+              ap->m_recv_buf = ap->m_recv_buf_ptr = nullptr;
+              ap->m_recv_buf_len = 0;
+            }
           }
         }
       }
@@ -453,7 +456,7 @@ bool AudioPipe::lws_service_thread() {
 
 void AudioPipe::initialize(const char* protocol, int loglevel, log_emit_function logger) {
   protocolName = protocol;
-  //lws_set_log_level(loglevel, logger);
+  lws_set_log_level(loglevel, logger);
 
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"AudioPipe::initialize starting\n"); 
   std::lock_guard<std::mutex> lock(mapMutex);

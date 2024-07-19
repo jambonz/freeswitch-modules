@@ -82,7 +82,7 @@ namespace {
     }
 
     //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Prebuffered data samples %u is above threshold %u, prepare to playout.\n", 
-    //  cBuffer->size(), tech_pvt->streamingPreBufSize);
+    /.\/  cBuffer->size(), tech_pvt->streamingPreBufSize);
 
     // after initial pre-buffering, rachet down the threshold to 40ms
     tech_pvt->streamingPreBufSize = 320 * tech_pvt->downscale_factor * 2;
@@ -169,6 +169,8 @@ namespace {
       }
       return SWITCH_STATUS_SUCCESS;
     }
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Failed to get mutext (temp)\n");
+
     return SWITCH_STATUS_SUCCESS;
   }
 
@@ -564,8 +566,8 @@ extern "C" {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "mod_audio_fork: audio buffer (in secs):    %d secs\n", nAudioBufferSecs);
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "mod_audio_fork: sub-protocol:              %s\n", mySubProtocolName);
  
-    int logs = LLL_ERR | LLL_WARN | LLL_NOTICE ;
-     //LLL_INFO | LLL_PARSER | LLL_HEADER | LLL_EXT | LLL_CLIENT  | LLL_LATENCY | LLL_DEBUG ;
+    //int logs = LLL_ERR | LLL_WARN | LLL_NOTICE | LLL_INFO | LLL_PARSER | LLL_HEADER | LLL_EXT | LLL_CLIENT  | LLL_LATENCY | LLL_DEBUG ;
+    int logs = LLL_ERR | LLL_WARN | LLL_NOTICE;
     drachtio::AudioPipe::initialize(mySubProtocolName, logs, lws_logger);
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "mod_audio_fork successfully initialized\n");
     return SWITCH_STATUS_SUCCESS;
