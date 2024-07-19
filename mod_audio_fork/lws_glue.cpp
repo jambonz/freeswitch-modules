@@ -81,8 +81,7 @@ namespace {
         return SWITCH_STATUS_SUCCESS;
     }
 
-    //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Prebuffered data samples %u is above threshold %u, prepare to playout.\n", 
-    /.\/  cBuffer->size(), tech_pvt->streamingPreBufSize);
+    //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Prebuffered data samples %u is above threshold %u, prepare to playout.\n", cBuffer->size(), tech_pvt->streamingPreBufSize);
 
     // after initial pre-buffering, rachet down the threshold to 40ms
     tech_pvt->streamingPreBufSize = 320 * tech_pvt->downscale_factor * 2;
