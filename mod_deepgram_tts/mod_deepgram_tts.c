@@ -19,10 +19,12 @@ static void cleardeepgram(deepgram_t* d, int freeAll) {
   if (d->connect_time_ms) free(d->connect_time_ms);
   if (d->final_response_time_ms) free(d->final_response_time_ms);
   if (d->cache_filename) free(d->cache_filename);
+  if (d->endpoint) free(d->endpoint);
   
 
   d->api_key = NULL;
   d->request_id = NULL;
+  d->endpoint = NULL;
 
   d->reported_model_name = NULL;
   d->reported_model_uuid = NULL;
@@ -121,6 +123,9 @@ static void d_text_param_tts(switch_speech_handle_t *sh, char *param, const char
   if (0 == strcmp(param, "api_key")) {
     if (d->api_key) free(d->api_key);
     d->api_key = strdup(val);
+  } else if (0 == strcmp(param, "endpoint")) {
+    if (d->endpoint) free(d->endpoint);
+    d->endpoint = strdup(val);
   } else if (0 == strcmp(param, "voice")) {
     if (d->voice_name) free(d->voice_name);
     d->voice_name = strdup(val);
