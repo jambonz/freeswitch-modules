@@ -271,7 +271,7 @@ SWITCH_STANDARD_API(dub_function)
         }
         else {
           char* text = argv[3];
-          int gain = argc > 4 ? atoi(argv[4]) : 0;
+          int gain = argc > 5 ? atoi(argv[5]) : 0;
           switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "sayOnTrack %s gain %d\n", text, gain);
           status = dub_say_on_track(session, track, text, gain);
         }
