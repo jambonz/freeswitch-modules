@@ -73,6 +73,8 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
 	switch_codec_implementation_t read_impl = { 0 };
 	void *pUserData;
 	uint32_t samples_per_second;
+	uint32_t desiredSampling = 8000;
+	const char* var;
 
   if (!switch_channel_get_variable(channel, "JAMBONZ_STT_URL")) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Missing JAMBONZ_STT_URL channel var\n");
@@ -91,8 +93,11 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
 	}
 
 	samples_per_second = !strcasecmp(read_impl.iananame, "g722") ? read_impl.actual_samples_per_second : read_impl.samples_per_second;
-
-	if (SWITCH_STATUS_FALSE == jb_transcribe_session_init(session, responseHandler, samples_per_second, flags & SMBF_STEREO ? 2 : 1, lang, interim, bugname, &pUserData)) {
+	var = switch_channel_get_variable(channel, "JAMBONZ_STT_SAMPLING");
+	if (var != NULL) {
+		desiredSampling = atoi(var);
+	}
+	if (SWITCH_STATUS_FALSE == jb_transcribe_session_init(session, responseHandler, samples_per_second, desiredSampling, flags & SMBF_STEREO ? 2 : 1, lang, interim, bugname, &pUserData)) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error initializing jb speech session.\n");
 		return SWITCH_STATUS_FALSE;
 	}

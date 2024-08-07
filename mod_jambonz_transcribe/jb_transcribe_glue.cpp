@@ -145,7 +145,7 @@ namespace {
     cJSON_AddStringToObject(json, "format", "raw");
     cJSON_AddStringToObject(json, "encoding", "LINEAR16");
     cJSON_AddBoolToObject(json, "interimResults", tech_pvt->interim);
-    cJSON_AddNumberToObject(json, "sampleRateHz", 8000);
+    cJSON_AddNumberToObject(json, "sampleRateHz", tech_pvt->sampling);
     if (var = switch_channel_get_variable(channel, "JAMBONZ_STT_OPTIONS")) {
       cJSON* jOptions = cJSON_Parse(var);
       if (jOptions)  {
@@ -353,7 +353,7 @@ extern "C" {
   }
 	
   switch_status_t jb_transcribe_session_init(switch_core_session_t *session, 
-    responseHandler_t responseHandler, uint32_t samples_per_second, uint32_t channels, 
+    responseHandler_t responseHandler, uint32_t samples_per_second, int desiredSampling, uint32_t channels, 
     char* lang, int interim, char* bugname, void **ppUserData)
   {    	
     int err;
@@ -365,7 +365,7 @@ extern "C" {
       return SWITCH_STATUS_FALSE;
     }
 
-    if (SWITCH_STATUS_SUCCESS != fork_data_init(tech_pvt, session, samples_per_second, 8000, channels, lang, interim, bugname, responseHandler)) {
+    if (SWITCH_STATUS_SUCCESS != fork_data_init(tech_pvt, session, samples_per_second, desiredSampling, channels, lang, interim, bugname, responseHandler)) {
       destroy_tech_pvt(tech_pvt);
       return SWITCH_STATUS_FALSE;
     }
