@@ -742,7 +742,7 @@ extern "C" {
     std::string url;
     std::ostringstream url_stream;
     // always use sample_rate=8000 for support jambonz caching system.
-    url_stream << (d->endpoint != NULL ? d->endpoint : "https://api.deepgram.com") << "/v1/speak?model=" << d->voice_name << "&encoding=linear16&sample_rate=8000";
+    url_stream << (d->endpoint != nullptr ? d->endpoint : "https://api.deepgram.com") << "/v1/speak?model=" << d->voice_name << "&encoding=linear16&sample_rate=8000";
     url = url_stream.str();
 
     /* create the JSON body */
