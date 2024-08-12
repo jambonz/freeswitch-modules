@@ -172,7 +172,7 @@ namespace {
     else if (customModel) oss << "&model=" << customModel;
 
     if (var = switch_channel_get_variable(channel, "DEEPGRAM_SPEECH_MODEL_VERSION")) {
-     oss <<  "&version";
+     oss <<  "&version=";
      oss <<  var;
     }
     oss <<  "&language=";
