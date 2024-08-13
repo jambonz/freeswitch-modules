@@ -111,9 +111,6 @@ public:
 		if (var = switch_channel_get_variable(channel, "AWS_VOCABULARY_FILTER_METHOD")) {
 			m_request.SetVocabularyFilterMethod(VocabularyFilterMethodMapper::GetVocabularyFilterMethodForName(var));
 		}
-		if (var = switch_channel_get_variable(channel, "AWS_LANGUAGE_MODEL_NAME")) {
-        	m_request.SetLanguageModelName(var);
-        }
     switch_core_session_rwunlock(session);
 	}
 
