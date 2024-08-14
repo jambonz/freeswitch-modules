@@ -53,6 +53,11 @@ struct private_data {
   int graceful_shutdown:1;
   char initialMetadata[8192];
 
+  // for "mark" feature of bidirectional audio
+  void *pVecMarksInInventory;
+  void *pVecMarksInUse;
+  void *pVecMarksCleared;
+
   // bidirectional audio
   void *streamingPlayoutBuffer;
   void *streamingPreBuffer;

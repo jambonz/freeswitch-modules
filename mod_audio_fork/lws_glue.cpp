@@ -27,6 +27,7 @@ typedef boost::circular_buffer<uint16_t> CircularBuffer_t;
 #define RTP_PACKETIZATION_PERIOD 20
 #define FRAME_SIZE_8000  320 /*which means each 20ms frame as 320 bytes at 8 khz (1 channel only)*/
 #define BUFFER_GROW_SIZE (16384)
+#define AUDIO_MARKER 0xFFFF
 
 namespace {
   static const char *requestedBufferSecs = std::getenv("MOD_AUDIO_FORK_BUFFER_SECS");
@@ -65,10 +66,28 @@ namespace {
     // Access the prebuffer
     CircularBuffer_t* cBuffer = static_cast<CircularBuffer_t*>(tech_pvt->streamingPreBuffer);
 
+    int numMarkers = 0;
+    std::deque<std::string>* pVecMarksInInventory = nullptr;
+    std::deque<std::string>* pVecMarksInUse = nullptr;
+    if (nullptr != tech_pvt->pVecMarksInInventory) {
+      pVecMarksInInventory = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInInventory);
+      pVecMarksInUse = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInUse);
+      numMarkers = pVecMarksInInventory->size();
+
+      // move inventory to in-use
+      pVecMarksInUse->insert(pVecMarksInUse->end(), pVecMarksInInventory->begin(), pVecMarksInInventory->end());
+      pVecMarksInInventory->clear();
+    }
+  
     // Ensure the prebuffer has enough capacity
-    if (cBuffer->capacity() - cBuffer->size() < numSamples) {
-        size_t newCapacity = cBuffer->size() + std::max(numSamples, (size_t)BUFFER_GROW_SIZE);
+    if (cBuffer->capacity() - cBuffer->size() < numSamples + numMarkers) {
+        size_t newCapacity = cBuffer->size() + std::max(numSamples + numMarkers, (size_t)BUFFER_GROW_SIZE);
         cBuffer->set_capacity(newCapacity);
+    }
+
+    // prepend any markers
+    while (numMarkers-- > 0) {
+      cBuffer->push_back(AUDIO_MARKER);
     }
 
     // Append the data to the prebuffer
@@ -269,6 +288,59 @@ namespace {
         // this will dump buffered incoming audio
         tech_pvt->clear_bidirectional_audio_buffer = true;
       }
+      else if (0 == type.compare("mark")) {
+        cJSON* data = cJSON_GetObjectItem(json, "data");
+        if (data) {
+          cJSON* name = cJSON_GetObjectItem(data, "name");
+          if (cJSON_IsString(name) && name->valuestring) {
+            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) processIncomingMessage - received mark %s\n", tech_pvt->id, name->valuestring);
+            if (nullptr == tech_pvt->pVecMarksInInventory) {
+              tech_pvt->pVecMarksInInventory = static_cast<void *>(new std::deque<std::string>());
+              tech_pvt->pVecMarksInUse = static_cast<void *>(new std::deque<std::string>());
+              tech_pvt->pVecMarksCleared = static_cast<void *>(new std::deque<std::string>());
+            }
+            std::deque<std::string>* pVec = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInInventory);
+            pVec->push_back(name->valuestring);
+          }
+        }
+      }
+      else if (0 == type.compare("clearMarks")) {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) processIncomingMessage - received clearMarks\n", tech_pvt->id);
+        if (nullptr != tech_pvt->pVecMarksInInventory) {
+          std::deque<std::string>* pVecMarksInInventory = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInInventory);
+          std::deque<std::string>* pVecMarksInUse = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInUse);
+          std::deque<std::string>* pVecMarksCleared = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksCleared);
+          pVecMarksCleared->insert(pVecMarksCleared->end(), pVecMarksInUse->begin(), pVecMarksInUse->end());
+          pVecMarksCleared->insert(pVecMarksCleared->end(), pVecMarksInInventory->begin(), pVecMarksInInventory->end());
+          pVecMarksInInventory->clear();
+          pVecMarksInUse->clear();
+        }
+      }
+      else if (0 == type.compare("transcription")) {
+        char* jsonString = cJSON_PrintUnformatted(jsonData);
+        tech_pvt->responseHandler(session, EVENT_TRANSCRIPTION, jsonString);
+        free(jsonString);        
+      }
+      else if (0 == type.compare("transfer")) {
+        char* jsonString = cJSON_PrintUnformatted(jsonData);
+        tech_pvt->responseHandler(session, EVENT_TRANSFER, jsonString);
+        free(jsonString);                
+      }
+      else if (0 == type.compare("disconnect")) {
+        char* jsonString = cJSON_PrintUnformatted(jsonData);
+        tech_pvt->responseHandler(session, EVENT_DISCONNECT, jsonString);
+        free(jsonString);        
+      }
+      else if (0 == type.compare("error")) {
+        char* jsonString = cJSON_PrintUnformatted(jsonData);
+        tech_pvt->responseHandler(session, EVENT_ERROR, jsonString);
+        free(jsonString);        
+      }
+      else if (0 == type.compare("json")) {
+        char* jsonString = cJSON_PrintUnformatted(json);
+        tech_pvt->responseHandler(session, EVENT_JSON, jsonString);
+        free(jsonString);
+      }
       else if (0 == type.compare("transcription")) {
         char* jsonString = cJSON_PrintUnformatted(jsonData);
         tech_pvt->responseHandler(session, EVENT_TRANSCRIPTION, jsonString);
@@ -400,6 +472,9 @@ namespace {
     }
     tech_pvt->streamingPreBufSize = 320 * tech_pvt->downscale_factor * 4; // min 80ms prebuffer
     tech_pvt->streamingPreBuffer = (void *) new CircularBuffer_t(8192);
+    tech_pvt->pVecMarksInInventory = nullptr;
+    tech_pvt->pVecMarksInUse = nullptr;
+    tech_pvt->pVecMarksCleared = nullptr;
 
     strncpy(tech_pvt->bugname, bugname, MAX_BUG_LEN);
     if (metadata) strncpy(tech_pvt->initialMetadata, metadata, MAX_METADATA_LEN);
@@ -466,6 +541,27 @@ namespace {
       CircularBuffer_t *cBuffer = (CircularBuffer_t *) tech_pvt->streamingPreBuffer;
       delete cBuffer;
       tech_pvt->streamingPreBuffer = nullptr;
+    }
+
+    if (nullptr == tech_pvt->pVecMarksInInventory) {
+      delete static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInInventory);
+      tech_pvt->pVecMarksInInventory = nullptr;
+      delete static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInUse);
+      tech_pvt->pVecMarksInUse = nullptr;
+      delete static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksCleared);
+      tech_pvt->pVecMarksCleared = nullptr;
+    }
+  }
+
+  static void send_mark_event(private_t* tech_pvt, const char* name, int cleared = false) {
+    drachtio::AudioPipe *pAudioPipe = static_cast<drachtio::AudioPipe *>(tech_pvt->pAudioPipe);
+    std::ostringstream json;
+    json << "{\"type\": \"mark\", \"data\": {\"name\":\"" << name << "\", ";
+    if (cleared) json << "\"event\": \"cleared\"}}";
+    else json << "\"event\": \"playout\"}}";
+
+    if (pAudioPipe) {
+      pAudioPipe->bufferForSending(json.str().c_str());
     }
   }
 
@@ -826,6 +922,28 @@ extern "C" {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) dub_speech_frame - clearing buffer\n", tech_pvt->id); 
         cBuffer->clear();
         tech_pvt->clear_bidirectional_audio_buffer = false;
+
+        // send "mark" event for any queued markers
+        if (nullptr != tech_pvt->pVecMarksInInventory) {
+          std::deque<std::string>* pVecMarksInInventory = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInInventory);
+          std::deque<std::string>* pVecMarksInUse = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInUse);
+          if (pVecMarksInInventory->size() + pVecMarksInUse->size() > 0) {
+            std::deque<std::string> vec = *pVecMarksInUse;
+            vec.insert(vec.end(), pVecMarksInInventory->begin(), pVecMarksInInventory->end());
+            for (auto it = vec.begin(); it != vec.end(); ++it) {
+              send_mark_event(tech_pvt, it->c_str(), true);
+              switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "(%u) dub_speech_frame - Marker %s cleared\n",
+                  tech_pvt->id, it->c_str());
+            }
+
+            // put the "in-use" ones into the "cleared" queue so we dont notify again when they eventually come through
+            std::deque<std::string>* pVecMarksCleared = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksCleared);
+            pVecMarksCleared->insert(pVecMarksCleared->end(), pVecMarksInUse->begin(), pVecMarksInUse->end());
+
+            pVecMarksInUse->clear();
+            pVecMarksInInventory->clear();
+          }
+        }
       }
       else {
         switch_frame_t* rframe = switch_core_media_bug_get_write_replace_frame(bug);
@@ -841,11 +959,62 @@ extern "C" {
 
         //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) dub_speech_frame - samples to copy %u\n", tech_pvt->id, samplesToCopy); 
 
-        std::copy_n(cBuffer->begin(), samplesToCopy, data);
-        cBuffer->erase(cBuffer->begin(), cBuffer->begin() + samplesToCopy);
+        bool hasMarkers = false;
+         std::deque<std::string>* pVecInUse = nullptr;
+        std::deque<std::string>* pVecCleared = nullptr;
+        if (nullptr != tech_pvt->pVecMarksInUse) {
+          pVecInUse = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInUse);
+          pVecCleared = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksCleared);
+          hasMarkers = pVecInUse->size() + pVecCleared->size() >  0;
+        }
+        if (hasMarkers) {
+          /* discard markers and send notifications */
+          auto bufferIter = cBuffer->begin();
+          auto dataIter = data;
 
-        if (samplesToCopy > 0) {
-          vector_add(fp, data, rframe->samples);
+          for (int i = 0; i < samplesToCopy; ++i) {
+            if (*bufferIter == AUDIO_MARKER) {
+              // Marker detected, discard it and send a notice unless it was previously cleared
+              auto * pVec = pVecCleared->size() > 0 ? pVecCleared : pVecInUse;
+              if (!pVec->empty()) {
+                auto name = pVec->front();
+                pVec->pop_front();
+
+                if (pVec == pVecInUse) {
+                  send_mark_event(tech_pvt, name.c_str());
+                  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "(%u) dub_speech_frame - Marker %s detected in playout\n",
+                    tech_pvt->id, name.c_str());
+                }
+                else {
+                  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "(%u) dub_speech_frame - Marker %s detected in playout but previously cleared\n",
+                    tech_pvt->id, name.c_str());
+                }
+              }
+            } else {
+              // Copy valid audio samplewhat 
+              *dataIter = *bufferIter;
+              ++dataIter;
+            }
+            ++bufferIter;
+          }
+
+          // Remove the processed samples (including discarded markers) from the buffer
+          cBuffer->erase(cBuffer->begin(), cBuffer->begin() + samplesToCopy);
+
+          // Adjust the number of samples copied to the output frame
+          int validSamplesCopied = std::distance(data, dataIter);
+
+          if (validSamplesCopied > 0) {
+            vector_add(fp, data, validSamplesCopied);
+          }
+        }
+        else {
+          std::copy_n(cBuffer->begin(), samplesToCopy, data);
+          cBuffer->erase(cBuffer->begin(), cBuffer->begin() + samplesToCopy);
+
+          if (samplesToCopy > 0) {
+            vector_add(fp, data, rframe->samples);
+          }
         }
         vector_normalize(fp, rframe->samples);
 
