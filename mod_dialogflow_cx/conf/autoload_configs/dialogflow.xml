@@ -1,0 +1,5 @@
+<configuration name="dialogflow.conf" description="Google Dialogflow Configuration">
+  <settings>
+    <param name="google-application-credentials-json-file" value="/tmp/gcs_service_account_key.json"/>
+  </settings>
+</configuration>
