@@ -1,21 +1,21 @@
 /* 
  *
- * mod_dialogflow.c -- Freeswitch module for running a google dialogflow
+ * mod_dialogflow_cx.c -- Freeswitch module for running a google dialogflow
  *
  */
-#include "mod_dialogflow.h"
+#include "mod_dialogflow_cx.h"
 #include "google_glue.h"
 
 #define DEFAULT_INTENT_TIMEOUT_SECS (30)
-#define DIALOGFLOW_INTENT "dialogflow_intent"
-#define DIALOGFLOW_INTENT_AUDIO_FILE "dialogflow_intent_audio_file"
+#define DIALOGFLOW_INTENT "dialogflow_cx_intent"
+#define DIALOGFLOW_INTENT_AUDIO_FILE "dialogflow_cx_intent_audio_file"
 
 /* Prototypes */
-SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_dialogflow_shutdown);
-SWITCH_MODULE_RUNTIME_FUNCTION(mod_dialogflow_runtime);
-SWITCH_MODULE_LOAD_FUNCTION(mod_dialogflow_load);
+SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_dialogflow_cx_shutdown);
+SWITCH_MODULE_RUNTIME_FUNCTION(mod_dialogflow_cx_runtime);
+SWITCH_MODULE_LOAD_FUNCTION(mod_dialogflow_cx_load);
 
-SWITCH_MODULE_DEFINITION(mod_dialogflow, mod_dialogflow_load, mod_dialogflow_shutdown, NULL);
+SWITCH_MODULE_DEFINITION(mod_dialogflow_cx, mod_dialogflow_cx_load, mod_dialogflow_cx_shutdown, NULL);
 
 static switch_status_t do_stop(switch_core_session_t *session);
 
@@ -34,7 +34,7 @@ static void errorHandler(switch_core_session_t* session, const char * json) {
 	switch_event_t *event;
 	switch_channel_t *channel = switch_core_session_get_channel(session);
 
-	switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, DIALOGFLOW_EVENT_ERROR);
+	switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, DIALOGFLOW_CX_EVENT_ERROR);
 	switch_channel_event_set_data(channel, event);
 	switch_event_add_body(event, "%s", json);
 
@@ -56,14 +56,14 @@ static switch_bool_t capture_callback(switch_media_bug_t *bug, void *user_data, 
 		{
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Got SWITCH_ABC_TYPE_CLOSE.\n");
 
-			google_dialogflow_session_stop(session, 1);
+			google_dialogflow_cx_session_stop(session, 1);
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Finished SWITCH_ABC_TYPE_CLOSE.\n");
 		}
 		break;
 	
 	case SWITCH_ABC_TYPE_READ:
 
-		return google_dialogflow_frame(bug, user_data);
+		return google_dialogflow_cx_frame(bug, user_data);
 		break;
 
 	case SWITCH_ABC_TYPE_WRITE:
@@ -97,7 +97,7 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
 		projectId, lang, event, text);
 
 	switch_core_session_get_read_impl(session, &read_impl);
-	if (SWITCH_STATUS_FALSE == google_dialogflow_session_init(session, responseHandler, errorHandler, 
+	if (SWITCH_STATUS_FALSE == google_dialogflow_cx_session_init(session, responseHandler, errorHandler, 
 		read_impl.samples_per_second, lang, projectId, event, text, &cb)) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error initializing google dialogflow session.\n");
 		status = SWITCH_STATUS_FALSE;
@@ -128,7 +128,7 @@ static switch_status_t do_stop(switch_core_session_t *session)
 
 	if (bug) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Received user command command to stop dialogflow.\n");
-		status = google_dialogflow_session_stop(session, 0);
+		status = google_dialogflow_cx_session_stop(session, 0);
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "stopped dialogflow.\n");
 	}
 
@@ -136,7 +136,7 @@ static switch_status_t do_stop(switch_core_session_t *session)
 }
 
 #define DIALOGFLOW_API_START_SYNTAX "<uuid> project-id lang-code [event]"
-SWITCH_STANDARD_API(dialogflow_api_start_function)
+SWITCH_STANDARD_API(dialogflow_cx_api_start_function)
 {
 	char *mycmd = NULL, *argv[10] = { 0 };
 	int argc = 0;
@@ -187,7 +187,7 @@ SWITCH_STANDARD_API(dialogflow_api_start_function)
 }
 
 #define DIALOGFLOW_API_STOP_SYNTAX "<uuid>"
-SWITCH_STANDARD_API(dialogflow_api_stop_function)
+SWITCH_STANDARD_API(dialogflow_cx_api_stop_function)
 {
 	char *mycmd = NULL, *argv[10] = { 0 };
 	int argc = 0;
@@ -224,31 +224,31 @@ SWITCH_STANDARD_API(dialogflow_api_stop_function)
 }
 
 
-/* Macro expands to: switch_status_t mod_dialogflow_load(switch_loadable_module_interface_t **module_interface, switch_memory_pool_t *pool) */
-SWITCH_MODULE_LOAD_FUNCTION(mod_dialogflow_load)
+/* Macro expands to: switch_status_t mod_dialogflow_cx_load(switch_loadable_module_interface_t **module_interface, switch_memory_pool_t *pool) */
+SWITCH_MODULE_LOAD_FUNCTION(mod_dialogflow_cx_load)
 {
 	switch_api_interface_t *api_interface;
 
 	/* create/register custom event message types */
-	if (switch_event_reserve_subclass(DIALOGFLOW_EVENT_INTENT) != SWITCH_STATUS_SUCCESS) {
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", DIALOGFLOW_EVENT_INTENT);
+	if (switch_event_reserve_subclass(DIALOGFLOW_CX_EVENT_INTENT) != SWITCH_STATUS_SUCCESS) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", DIALOGFLOW_CX_EVENT_INTENT);
 		return SWITCH_STATUS_TERM;
 	}
-	if (switch_event_reserve_subclass(DIALOGFLOW_EVENT_TRANSCRIPTION) != SWITCH_STATUS_SUCCESS) {
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", DIALOGFLOW_EVENT_TRANSCRIPTION);
+	if (switch_event_reserve_subclass(DIALOGFLOW_CX_EVENT_TRANSCRIPTION) != SWITCH_STATUS_SUCCESS) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", DIALOGFLOW_CX_EVENT_TRANSCRIPTION);
 		return SWITCH_STATUS_TERM;
 	}
-	if (switch_event_reserve_subclass(DIALOGFLOW_EVENT_END_OF_UTTERANCE) != SWITCH_STATUS_SUCCESS) {
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", DIALOGFLOW_EVENT_END_OF_UTTERANCE);
+	if (switch_event_reserve_subclass(DIALOGFLOW_CX_EVENT_END_OF_UTTERANCE) != SWITCH_STATUS_SUCCESS) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", DIALOGFLOW_CX_EVENT_END_OF_UTTERANCE);
 		return SWITCH_STATUS_TERM;
 	}
-	if (switch_event_reserve_subclass(DIALOGFLOW_EVENT_AUDIO_PROVIDED) != SWITCH_STATUS_SUCCESS) {
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", DIALOGFLOW_EVENT_AUDIO_PROVIDED);
+	if (switch_event_reserve_subclass(DIALOGFLOW_CX_EVENT_AUDIO_PROVIDED) != SWITCH_STATUS_SUCCESS) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", DIALOGFLOW_CX_EVENT_AUDIO_PROVIDED);
 		return SWITCH_STATUS_TERM;
 	}
 
-	if (switch_event_reserve_subclass(DIALOGFLOW_EVENT_ERROR) != SWITCH_STATUS_SUCCESS) {
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", DIALOGFLOW_EVENT_ERROR);
+	if (switch_event_reserve_subclass(DIALOGFLOW_CX_EVENT_ERROR) != SWITCH_STATUS_SUCCESS) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't register subclass %s!\n", DIALOGFLOW_CX_EVENT_ERROR);
 		return SWITCH_STATUS_TERM;
 	}
 
@@ -256,21 +256,21 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_dialogflow_load)
 	/* connect my internal structure to the blank pointer passed to me */
 	*module_interface = switch_loadable_module_create_module_interface(pool, modname);
 
-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "Google Dialogflow API loading..\n");
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "Google Dialogflow CX API loading..\n");
 
-  if (SWITCH_STATUS_FALSE == google_dialogflow_init()) {
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CRIT, "Failed initializing google dialogflow interface\n");
+  if (SWITCH_STATUS_FALSE == google_dialogflow_cx_init()) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CRIT, "Failed initializing google dialogflow cx interface\n");
 	}
 
-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "Google Dialogflow API successfully loaded\n");
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "Google Dialogflow CX API successfully loaded\n");
 
-	SWITCH_ADD_API(api_interface, "dialogflow_start", "Start a google dialogflow", dialogflow_api_start_function, DIALOGFLOW_API_START_SYNTAX);
-	SWITCH_ADD_API(api_interface, "dialogflow_stop", "Terminate a google dialogflow", dialogflow_api_stop_function, DIALOGFLOW_API_STOP_SYNTAX);
+	SWITCH_ADD_API(api_interface, "dialogflow_cx_start", "Start a google dialogflow cx", dialogflow_cx_api_start_function, DIALOGFLOW_API_START_SYNTAX);
+	SWITCH_ADD_API(api_interface, "dialogflow_CX_stop", "Terminate a google dialogflow cx", dialogflow_cx_api_stop_function, DIALOGFLOW_API_STOP_SYNTAX);
 
-	switch_console_set_complete("add dialogflow_stop");
-	switch_console_set_complete("add dialogflow_start project lang");
-	switch_console_set_complete("add dialogflow_start project lang timeout-secs");
-	switch_console_set_complete("add dialogflow_start project lang timeout-secs event");
+	switch_console_set_complete("add dialogflow_stop_cx");
+	switch_console_set_complete("add dialogflow_start_cx project lang");
+	switch_console_set_complete("add dialogflow_start_cx project lang timeout-secs");
+	switch_console_set_complete("add dialogflow_start_cx project lang timeout-secs event");
 
 	/* indicate that the module should continue to be loaded */
 	return SWITCH_STATUS_SUCCESS;
@@ -279,15 +279,15 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_dialogflow_load)
 /*
   Called when the system shuts down
   Macro expands to: switch_status_t mod_dialogflow_shutdown() */
-SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_dialogflow_shutdown)
+SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_dialogflow_cx_shutdown)
 {
-	google_dialogflow_cleanup();
+	google_dialogflow_cx_cleanup();
 
-	switch_event_free_subclass(DIALOGFLOW_EVENT_INTENT);
-	switch_event_free_subclass(DIALOGFLOW_EVENT_TRANSCRIPTION);
-	switch_event_free_subclass(DIALOGFLOW_EVENT_END_OF_UTTERANCE);
-	switch_event_free_subclass(DIALOGFLOW_EVENT_AUDIO_PROVIDED);
-	switch_event_free_subclass(DIALOGFLOW_EVENT_ERROR);
+	switch_event_free_subclass(DIALOGFLOW_CX_EVENT_INTENT);
+	switch_event_free_subclass(DIALOGFLOW_CX_EVENT_TRANSCRIPTION);
+	switch_event_free_subclass(DIALOGFLOW_CX_EVENT_END_OF_UTTERANCE);
+	switch_event_free_subclass(DIALOGFLOW_CX_EVENT_AUDIO_PROVIDED);
+	switch_event_free_subclass(DIALOGFLOW_CX_EVENT_ERROR);
 
 	return SWITCH_STATUS_SUCCESS;
 }

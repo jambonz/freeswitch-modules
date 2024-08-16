@@ -16,20 +16,20 @@
 
 #include "google/cloud/dialogflow/cx/v3/session.grpc.pb.h"
 
-#include "mod_dialogflow.h"
+#include "mod_dialogflow_cx.h"
 #include "parser.h"
 
-using google::cloud::dialogflow::v2beta1::Sessions;
-using google::cloud::dialogflow::v2beta1::StreamingDetectIntentRequest;
-using google::cloud::dialogflow::v2beta1::StreamingDetectIntentResponse;
-using google::cloud::dialogflow::v2beta1::AudioEncoding;
-using google::cloud::dialogflow::v2beta1::InputAudioConfig;
-using google::cloud::dialogflow::v2beta1::OutputAudioConfig;
-using google::cloud::dialogflow::v2beta1::SynthesizeSpeechConfig;
-using google::cloud::dialogflow::v2beta1::QueryInput;
-using google::cloud::dialogflow::v2beta1::QueryResult;
-using google::cloud::dialogflow::v2beta1::StreamingRecognitionResult;
-using google::cloud::dialogflow::v2beta1::EventInput;
+using google::cloud::dialogflow::cx::v3::Sessions;
+using google::cloud::dialogflow::cx::v3::StreamingDetectIntentRequest;
+using google::cloud::dialogflow::cx::v3::StreamingDetectIntentResponse;
+using google::cloud::dialogflow::cx::v3::AudioEncoding;
+using google::cloud::dialogflow::cx::v3::InputAudioConfig;
+using google::cloud::dialogflow::cx::v3::OutputAudioConfig;
+using google::cloud::dialogflow::cx::v3::SynthesizeSpeechConfig;
+using google::cloud::dialogflow::cx::v3::QueryInput;
+using google::cloud::dialogflow::cx::v3::QueryResult;
+using google::cloud::dialogflow::cx::v3::StreamingRecognitionResult;
+using google::cloud::dialogflow::cx::v3::EventInput;
 using google::rpc::Status;
 using google::protobuf::Struct;
 using google::protobuf::Value;
@@ -51,7 +51,7 @@ static switch_status_t hanguphook(switch_core_session_t *session) {
 			std::string filename = it->second;
 			std::remove(filename.c_str());
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, 
-				"google_dialogflow_session_cleanup: removed audio file %s\n", filename.c_str());
+				"google_dialogflow_cx_session_cleanup: removed audio file %s\n", filename.c_str());
 		}
 		audioFiles.erase(sessionId);
 		switch_core_event_hook_remove_state_change(session, hanguphook);
@@ -342,13 +342,13 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
 			if (response.has_query_result() || response.has_recognition_result()) {
 				cJSON* jResponse = parser.parse(response) ;
 				char* json = cJSON_PrintUnformatted(jResponse);
-				const char* type = DIALOGFLOW_EVENT_TRANSCRIPTION;
+				const char* type = DIALOGFLOW_CX_EVENT_TRANSCRIPTION;
 
-				if (response.has_query_result()) type = DIALOGFLOW_EVENT_INTENT;
+				if (response.has_query_result()) type = DIALOGFLOW_CX_EVENT_INTENT;
 				else {
 					const StreamingRecognitionResult_MessageType& o = response.recognition_result().message_type();
 					if (0 == StreamingRecognitionResult_MessageType_Name(o).compare("END_OF_SINGLE_UTTERANCE")) {
-						type = DIALOGFLOW_EVENT_END_OF_UTTERANCE;
+						type = DIALOGFLOW_CX_EVENT_END_OF_UTTERANCE;
 					}
 				}
 
@@ -394,7 +394,7 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
 				cJSON_AddItemToObject(jResponse, "path", cJSON_CreateString(s.str().c_str()));
 				char* json = cJSON_PrintUnformatted(jResponse);
 
-				cb->responseHandler(psession, DIALOGFLOW_EVENT_AUDIO_PROVIDED, json);
+				cb->responseHandler(psession, DIALOGFLOW_CX_EVENT_AUDIO_PROVIDED, json);
 				free(json);
 				cJSON_Delete(jResponse);
 			}
@@ -404,7 +404,7 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
 			break;
 		}
 	}
-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "dialogflow read loop is done\n");
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "dialogflow_cx read loop is done\n");
 
 	// finish the detect intent session: here is where we may get an error if credentials are invalid
 	switch_core_session_t* psession = switch_core_session_locate(cb->sessionId);
@@ -429,7 +429,7 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
 }
 
 extern "C" {
-	switch_status_t google_dialogflow_init() {
+	switch_status_t google_dialogflow_cx_init() {
 		const char* gcsServiceKeyFile = std::getenv("GOOGLE_APPLICATION_CREDENTIALS");
 		if (NULL == gcsServiceKeyFile) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, 
@@ -441,12 +441,12 @@ extern "C" {
 		return SWITCH_STATUS_SUCCESS;
 	}
 	
-	switch_status_t google_dialogflow_cleanup() {
+	switch_status_t google_dialogflow_cx_cleanup() {
 		return SWITCH_STATUS_SUCCESS;
 	}
 
 	// start dialogflow on a channel
-	switch_status_t google_dialogflow_session_init(
+	switch_status_t google_dialogflow_cx_session_init(
 		switch_core_session_t *session, 
 		responseHandler_t responseHandler, 
 		errorHandler_t errorHandler, 
@@ -510,7 +510,7 @@ extern "C" {
 		return status;
 	}
 
-	switch_status_t google_dialogflow_session_stop(switch_core_session_t *session, int channelIsClosing) {
+	switch_status_t google_dialogflow_cx_session_stop(switch_core_session_t *session, int channelIsClosing) {
 		switch_channel_t *channel = switch_core_session_get_channel(session);
 		switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, MY_BUG_NAME);
 
@@ -519,21 +519,21 @@ extern "C" {
 			switch_status_t st;
 
 			// close connection and get final responses
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "google_dialogflow_session_cleanup: acquiring lock\n");
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "google_dialogflow_cx_session_cleanup: acquiring lock\n");
 			switch_mutex_lock(cb->mutex);
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "google_dialogflow_session_cleanup: acquired lock\n");
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "google_dialogflow_cx_session_cleanup: acquired lock\n");
 			GStreamer* streamer = (GStreamer *) cb->streamer;
 			if (streamer) {
-				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "google_dialogflow_session_cleanup: sending writesDone..\n");
+				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "google_dialogflow_cx_session_cleanup: sending writesDone..\n");
 				streamer->writesDone();
 				streamer->finish();
 			}
 			if (cb->thread) {
 				switch_status_t retval;
-				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "google_dialogflow_session_cleanup: waiting for read thread to complete\n");
+				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "google_dialogflow_cx_session_cleanup: waiting for read thread to complete\n");
 				switch_thread_join(&retval, cb->thread);
 				cb->thread = NULL;
-				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "google_dialogflow_session_cleanup: read thread completed\n");
+				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "google_dialogflow_cx_session_cleanup: read thread completed\n");
 			}
 			killcb(cb);
 
@@ -541,7 +541,7 @@ extern "C" {
 			if (!channelIsClosing) switch_core_media_bug_remove(session, &bug);
 
 			switch_mutex_unlock(cb->mutex);
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "google_dialogflow_session_cleanup: Closed google session\n");
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "google_dialogflow_cx_session_cleanup: Closed google session\n");
 
 			return SWITCH_STATUS_SUCCESS;
 		}
@@ -550,7 +550,7 @@ extern "C" {
 		return SWITCH_STATUS_FALSE;
 	}
 	
-	switch_bool_t google_dialogflow_frame(switch_media_bug_t *bug, void* user_data) {
+	switch_bool_t google_dialogflow_cx_frame(switch_media_bug_t *bug, void* user_data) {
 		switch_core_session_t *session = switch_core_media_bug_get_session(bug);
 		uint8_t data[SWITCH_RECOMMENDED_BUFFER_SIZE];
 		switch_frame_t frame = {};
@@ -577,13 +577,13 @@ extern "C" {
 			}
 			else {
 				//switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, 
-				//	"google_dialogflow_frame: not sending audio because google channel has been closed\n");
+				//	"google_dialogflow_cx_frame: not sending audio because google channel has been closed\n");
 			}
 			switch_mutex_unlock(cb->mutex);
 		}
 		else {
 			//switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, 
-			//	"google_dialogflow_frame: not sending audio since failed to get lock on mutex\n");
+			//	"google_dialogflow_cx_frame: not sending audio since failed to get lock on mutex\n");
 		}
 		return SWITCH_TRUE;
 	}

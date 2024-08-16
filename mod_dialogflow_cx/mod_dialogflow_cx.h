@@ -1,17 +1,17 @@
-#ifndef __MOD_DIALOGFLOW_H__
-#define __MOD_DIALOGFLOW_H__
+#ifndef __MOD_DIALOGFLOW_CX_H__
+#define __MOD_DIALOGFLOW_CX_H__
 
 #include <switch.h>
 #include <speex/speex_resampler.h>
 
 #include <unistd.h>
 
-#define MY_BUG_NAME "__dialogflow_bug__"
-#define DIALOGFLOW_EVENT_INTENT "dialogflow::intent"
-#define DIALOGFLOW_EVENT_TRANSCRIPTION "dialogflow::transcription"
-#define DIALOGFLOW_EVENT_AUDIO_PROVIDED "dialogflow::audio_provided"
-#define DIALOGFLOW_EVENT_END_OF_UTTERANCE "dialogflow::end_of_utterance"
-#define DIALOGFLOW_EVENT_ERROR "dialogflow::error"
+#define MY_BUG_NAME "__dialogflow_cx_bug__"
+#define DIALOGFLOW_CX_EVENT_INTENT "dialogflow_cx::intent"
+#define DIALOGFLOW_CX_EVENT_TRANSCRIPTION "dialogflow_cx::transcription"
+#define DIALOGFLOW_CX_EVENT_AUDIO_PROVIDED "dialogflow_cx::audio_provided"
+#define DIALOGFLOW_CX_EVENT_END_OF_UTTERANCE "dialogflow_cx::end_of_utterance"
+#define DIALOGFLOW_CX_EVENT_ERROR "dialogflow_cx::error"
 
 #define MAX_LANG (12)
 #define MAX_PROJECT_ID (128)
