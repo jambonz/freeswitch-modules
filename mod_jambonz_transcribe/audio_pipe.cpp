@@ -1,5 +1,5 @@
 #include "audio_pipe.hpp"
-
+#include <switch.h>
 #include <cassert>
 #include <iostream>
 
@@ -230,13 +230,14 @@ int AudioPipe::lws_callback(struct lws *wsi,
 
 
 // static members
+const bool ping_pong_enabled = switch_true(std::getenv("WS_PING_PONG_ENABLED"));
 static const lws_retry_bo_t retry = {
-    nullptr,   // retry_ms_table
-    0,         // retry_ms_table_count
-    0,         // conceal_count
-    UINT16_MAX,         // secs_since_valid_ping
-    UINT16_MAX,        // secs_since_valid_hangup
-    0          // jitter_percent
+    nullptr,                                           // retry_ms_table
+    0,                                                 // retry_ms_table_count
+    0,                                                 // conceal_count
+    ping_pong_enabled ? static_cast<uint16_t>(30) : static_cast<uint16_t>(UINT16_MAX),  // secs_since_valid_ping, if enabled, send ping after connection is idle for 30 seconds
+    ping_pong_enabled ? static_cast<uint16_t>(10) : static_cast<uint16_t>(UINT16_MAX),  // secs_since_valid_hangup, if enabled, kill the connection after 10 seconds without response pong
+    0                                                  // jitter_percent
 };
 
 struct lws_context *AudioPipe::context = nullptr;
