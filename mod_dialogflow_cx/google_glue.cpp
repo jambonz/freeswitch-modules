@@ -30,6 +30,7 @@ using google::cloud::dialogflow::cx::v3::QueryInput;
 using google::cloud::dialogflow::cx::v3::QueryResult;
 using google::cloud::dialogflow::cx::v3::StreamingRecognitionResult;
 using google::cloud::dialogflow::cx::v3::EventInput;
+using google::cloud::dialogflow::cx::v3::SsmlVoiceGender;
 using google::rpc::Status;
 using google::protobuf::Struct;
 using google::protobuf::Value;
@@ -180,70 +181,66 @@ public:
 		auto* queryInput = m_request->mutable_query_input();
 		if (event) {
 			auto* eventInput = queryInput->mutable_event();
-			eventInput->set_name(event);
-			eventInput->set_language_code(m_lang.c_str());
-			if (text) {
-				cJSON* json = cJSON_Parse(text);
-				if (!json) {
-					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "GStreamer::startStream ignoring event params since it is not json %s\n", text);
-				}
-				else {
-					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer::startStream adding event params (JSON) %s\n", text);
-					auto* eventParams = eventInput->mutable_parameters();
-					parseEventParams(eventParams, json);
-					cJSON_Delete(json);
-				}
-			}
-		}
+			eventInput->set_event(event);
+			queryInput->set_language_code(m_lang.c_str());
+    }
 		else if (text) {
 			auto* textInput = queryInput->mutable_text();
 			textInput->set_text(text);
-			textInput->set_language_code(m_lang.c_str());
+			queryInput->set_language_code(m_lang.c_str());
 		}
 		else {
-			auto* audio_config = queryInput->mutable_audio_config();
+			auto* audio_input = queryInput->mutable_audio();
+      auto* audio_config = audio_input->mutable_config();
 			audio_config->set_sample_rate_hertz(16000);
+      audio_config->set_enable_word_info(false);
 			audio_config->set_audio_encoding(AudioEncoding::AUDIO_ENCODING_LINEAR_16);
-			audio_config->set_language_code(m_lang.c_str());
-			audio_config->set_single_utterance(true);
-        }
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer::startStream checking OutputAudioConfig custom parameters: speaking rate %f,"
-                                                                " pitch %f, volume %f, voice name '%s' gender '%s', effects '%s'\n", m_speakingRate,
-                                                                m_pitch, m_volume, m_voiceName.c_str(), m_voiceGender.c_str(), m_effects.c_str());
-        if (isAnyOutputAudioConfigChanged()) {
-	        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "GStreamer::startStream adding a custom OutputAudioConfig to the request since at"
-                                                                   " least one parameter was received.");
-            auto* outputAudioConfig = m_request->mutable_output_audio_config();
-            outputAudioConfig->set_sample_rate_hertz(16000);
-            outputAudioConfig->set_audio_encoding(OutputAudioEncoding::OUTPUT_AUDIO_ENCODING_LINEAR_16);
+			audio_config->set_single_utterance(false);
 
-            auto* synthesizeSpeechConfig = outputAudioConfig->mutable_synthesize_speech_config();
-            if (m_speakingRate) synthesizeSpeechConfig->set_speaking_rate(m_speakingRate);
-            if (m_pitch) synthesizeSpeechConfig->set_pitch(m_pitch);
-            if (m_volume) synthesizeSpeechConfig->set_volume_gain_db(m_volume);
-            if (!m_effects.empty()) synthesizeSpeechConfig->add_effects_profile_id(m_effects);
+      /**
+       * Note: there are other parameters that can be set in the audio config, such as:
+       * hints, model, model variant, barge in config
+       * 
+       */
 
-            auto* voice = synthesizeSpeechConfig->mutable_voice();
-            if (!m_voiceName.empty()) voice->set_name(m_voiceName);
-            if (!m_voiceGender.empty()) {
-                SsmlVoiceGender gender = SsmlVoiceGender::SSML_VOICE_GENDER_UNSPECIFIED;
-                switch (toupper(m_voiceGender[0]))
-                {
-                    case 'F': gender = SsmlVoiceGender::SSML_VOICE_GENDER_MALE; break;
-                    case 'M': gender = SsmlVoiceGender::SSML_VOICE_GENDER_FEMALE; break;
-                    case 'N': gender = SsmlVoiceGender::SSML_VOICE_GENDER_NEUTRAL; break;
-                }
-                voice->set_ssml_gender(gender);
+			queryInput->set_language_code(m_lang.c_str());
+    }
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer::startStream checking OutputAudioConfig custom parameters: speaking rate %f,"
+                                                            " pitch %f, volume %f, voice name '%s' gender '%s', effects '%s'\n", m_speakingRate,
+                                                            m_pitch, m_volume, m_voiceName.c_str(), m_voiceGender.c_str(), m_effects.c_str());
+    if (isAnyOutputAudioConfigChanged()) {
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "GStreamer::startStream adding a custom OutputAudioConfig to the request since at"
+                                                                " least one parameter was received.");
+        auto* outputAudioConfig = m_request->mutable_output_audio_config();
+        outputAudioConfig->set_sample_rate_hertz(16000);
+        outputAudioConfig->set_audio_encoding(OutputAudioEncoding::OUTPUT_AUDIO_ENCODING_LINEAR_16);
+
+        auto* synthesizeSpeechConfig = outputAudioConfig->mutable_synthesize_speech_config();
+        if (m_speakingRate) synthesizeSpeechConfig->set_speaking_rate(m_speakingRate);
+        if (m_pitch) synthesizeSpeechConfig->set_pitch(m_pitch);
+        if (m_volume) synthesizeSpeechConfig->set_volume_gain_db(m_volume);
+        if (!m_effects.empty()) synthesizeSpeechConfig->add_effects_profile_id(m_effects);
+
+        auto* voice = synthesizeSpeechConfig->mutable_voice();
+        if (!m_voiceName.empty()) voice->set_name(m_voiceName);
+        if (!m_voiceGender.empty()) {
+            SsmlVoiceGender gender = SsmlVoiceGender::SSML_VOICE_GENDER_UNSPECIFIED;
+            switch (toupper(m_voiceGender[0]))
+            {
+                case 'F': gender = SsmlVoiceGender::SSML_VOICE_GENDER_MALE; break;
+                case 'M': gender = SsmlVoiceGender::SSML_VOICE_GENDER_FEMALE; break;
+                case 'N': gender = SsmlVoiceGender::SSML_VOICE_GENDER_NEUTRAL; break;
             }
-        } else {
-            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "GStreamer::startStream no custom parameters for OutputAudioConfig, keeping default");
+            voice->set_ssml_gender(gender);
+        }
+      } else {
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "GStreamer::startStream no custom parameters for OutputAudioConfig, keeping default");
 		}
 
         if (m_sentimentAnalysis) {
             switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "GStreamer::startStream received sentiment analysis flag as true, adding as query param");
             auto* queryParameters = m_request->mutable_query_params();
-            auto* sentimentAnalysisConfig = queryParameters->mutable_sentiment_analysis_request_config();
-            sentimentAnalysisConfig->set_analyze_query_text_sentiment(m_sentimentAnalysis);
+            queryParameters->set_analyze_query_text_sentiment(m_sentimentAnalysis);
         }
 
 		m_streamer = m_stub->StreamingDetectIntent(m_context.get());
@@ -257,7 +254,7 @@ public:
 
 		m_request->clear_query_input();
 		m_request->clear_query_params();
-		m_request->set_input_audio(data, datalen);
+    m_request->mutable_query_input()->mutable_audio()->set_audio(data, datalen);
 
 		m_packets++;
     return m_streamer->Write(*m_request);
@@ -339,12 +336,18 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
 			switch_channel_t* channel = switch_core_session_get_channel(psession);
 			GRPCParser parser(psession);
 
-			if (response.has_query_result() || response.has_recognition_result()) {
+      // TODO: handle has_debugging_info()
+
+      bool hasAudio = false;
+			if (response.has_detect_intent_response() || response.has_recognition_result()) {
 				cJSON* jResponse = parser.parse(response) ;
 				char* json = cJSON_PrintUnformatted(jResponse);
 				const char* type = DIALOGFLOW_CX_EVENT_TRANSCRIPTION;
 
-				if (response.has_query_result()) type = DIALOGFLOW_CX_EVENT_INTENT;
+				if (response.has_detect_intent_response()) {
+          hasAudio = response.detect_intent_response().output_audio().length() > 0;
+          type = DIALOGFLOW_CX_EVENT_INTENT;
+        }
 				else {
 					const StreamingRecognitionResult_MessageType& o = response.recognition_result().message_type();
 					if (0 == StreamingRecognitionResult_MessageType_Name(o).compare("END_OF_SINGLE_UTTERANCE")) {
@@ -358,18 +361,17 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
 				cJSON_Delete(jResponse);
 			}
 
-			const std::string& audio = parser.parseAudio(response);
-			bool playAudio = !audio.empty() ;
-
 			// save audio
-			if (playAudio) {
+			if (hasAudio) {
+        auto& dir = response.detect_intent_response();
+        const std::string& audio = dir.output_audio();
 				std::ostringstream s;
 				s << SWITCH_GLOBAL_dirs.temp_dir << SWITCH_PATH_SEPARATOR <<
 					cb->sessionId << "_" <<  ++playCount;
 				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(psession), SWITCH_LOG_DEBUG, "grpc_read_thread: received audio to play\n");
 
-				if (response.has_output_audio_config()) {
-					const OutputAudioConfig& cfg = response.output_audio_config();
+				if (dir.has_output_audio_config()) {
+					auto& cfg = dir.output_audio_config();
 					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(psession), SWITCH_LOG_DEBUG, "grpc_read_thread: encoding is %d\n", cfg.audio_encoding());
 					if (cfg.audio_encoding() == OutputAudioEncoding::OUTPUT_AUDIO_ENCODING_MP3) {
 						s << ".mp3";

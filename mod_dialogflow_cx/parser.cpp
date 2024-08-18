@@ -152,7 +152,7 @@ cJSON* GRPCParser::parse(const Match& o) {
   cJSON * json = cJSON_CreateObject();
 
   cJSON_AddItemToObject(json, "resolved_input", cJSON_CreateString(o.resolved_input().c_str()));
-  cJSON_AddItemToObject(json, "event", cJSON_CreateString(Match_MatchType_Name(o.event()).c_str()));
+  cJSON_AddItemToObject(json, "event", cJSON_CreateString(o.event().c_str()));
   if (o.has_intent()) cJSON_AddItemToObject(json, "intent", parse(o.intent()));
   cJSON_AddItemToObject(json, "parameters", parse(o.parameters()));
   cJSON_AddItemToObject(json, "match_type", cJSON_CreateString(Match_MatchType_Name(o.match_type()).c_str()));
@@ -407,9 +407,9 @@ cJSON* GRPCParser::parse(const DetectIntentResponse& o)  {
     cJSON_AddItemToObject(json, "response_id", cJSON_CreateString(o.response_id().c_str()));
     cJSON_AddItemToObject(json, "query_result", parse(o.query_result()));
     cJSON_AddItemToObject(json, "output_audio", cJSON_CreateString(o.output_audio().c_str()));
-    cJSON_AddItemToObject(json, "output_audio_config", cJSON_CreateString(o.output_audio_config()));
-    cJSON_AddItemToObject(json, "response_type", cJSON_CreateString(o.response_type));
-    cJSON_AddItemToObject(json, "allow_cancellation", cJSON_CreateBool(o.allow_cancellation));
+    cJSON_AddItemToObject(json, "output_audio_config", parse(o.output_audio_config()));
+    cJSON_AddItemToObject(json, "response_type", cJSON_CreateString(DetectIntentResponse_ResponseType_Name(o.response_type()).c_str()));
+    cJSON_AddItemToObject(json, "allow_cancellation", cJSON_CreateBool(o.allow_cancellation()));
 
     return json;
 }
