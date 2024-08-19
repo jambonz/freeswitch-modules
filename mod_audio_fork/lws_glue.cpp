@@ -28,6 +28,7 @@ typedef boost::circular_buffer<uint16_t> CircularBuffer_t;
 #define FRAME_SIZE_8000  320 /*which means each 20ms frame as 320 bytes at 8 khz (1 channel only)*/
 #define BUFFER_GROW_SIZE (16384)
 #define AUDIO_MARKER 0xFFFF
+#define MAX_MARKS (30)
 
 namespace {
   static const char *requestedBufferSecs = std::getenv("MOD_AUDIO_FORK_BUFFER_SECS");
@@ -38,6 +39,15 @@ namespace {
   static unsigned int nServiceThreads = std::max(1, std::min(requestedNumServiceThreads ? ::atoi(requestedNumServiceThreads) : 1, 5));
   static unsigned int idxCallCount = 0;
   static uint32_t playCount = 0;
+
+  static bool markCountExceeded(private_t* tech_pvt) {
+    if (nullptr != tech_pvt->pVecMarksInUse) {
+      std::deque<std::string>* pVecMarksInUse = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInUse);
+      std::deque<std::string>* pVecMarksInInventory = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInInventory);
+      return pVecMarksInUse->size()+ pVecMarksInInventory->size() >= MAX_MARKS;
+    }
+    return false;
+  }
 
   switch_status_t processIncomingBinary(private_t* tech_pvt, switch_core_session_t* session, const char* message, size_t dataLength) {
     std::vector<uint8_t> data;
@@ -293,13 +303,18 @@ namespace {
         if (data) {
           cJSON* name = cJSON_GetObjectItem(data, "name");
           if (cJSON_IsString(name) && name->valuestring) {
-            if (nullptr == tech_pvt->pVecMarksInInventory) {
-              tech_pvt->pVecMarksInInventory = static_cast<void *>(new std::deque<std::string>());
-              tech_pvt->pVecMarksInUse = static_cast<void *>(new std::deque<std::string>());
-              tech_pvt->pVecMarksCleared = static_cast<void *>(new std::deque<std::string>());
+            if (markCountExceeded(tech_pvt)) {
+              switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "(%u) processIncomingMessage - mark count exceeded, discarding mark %s\n", tech_pvt->id, name.c_str());
             }
-            std::deque<std::string>* pVec = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInInventory);
-            pVec->push_back(name->valuestring);
+            else {
+              if (nullptr == tech_pvt->pVecMarksInInventory) {
+                tech_pvt->pVecMarksInInventory = static_cast<void *>(new std::deque<std::string>());
+                tech_pvt->pVecMarksInUse = static_cast<void *>(new std::deque<std::string>());
+                tech_pvt->pVecMarksCleared = static_cast<void *>(new std::deque<std::string>());
+              }
+              std::deque<std::string>* pVec = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInInventory);
+              pVec->push_back(name->valuestring);
+            }
           }
         }
       }
