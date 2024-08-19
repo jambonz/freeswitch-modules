@@ -293,7 +293,6 @@ namespace {
         if (data) {
           cJSON* name = cJSON_GetObjectItem(data, "name");
           if (cJSON_IsString(name) && name->valuestring) {
-            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) processIncomingMessage - received mark %s\n", tech_pvt->id, name->valuestring);
             if (nullptr == tech_pvt->pVecMarksInInventory) {
               tech_pvt->pVecMarksInInventory = static_cast<void *>(new std::deque<std::string>());
               tech_pvt->pVecMarksInUse = static_cast<void *>(new std::deque<std::string>());
@@ -561,7 +560,9 @@ namespace {
     else json << "\"event\": \"playout\"}}";
 
     if (pAudioPipe) {
-      pAudioPipe->bufferForSending(json.str().c_str());
+      std::string str = json.str();
+      pAudioPipe->bufferForSending(str.c_str());
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) send_mark_event: %s\n", tech_pvt->id, str.c_str());
     }
   }
 
@@ -931,9 +932,9 @@ extern "C" {
             std::deque<std::string> vec = *pVecMarksInUse;
             vec.insert(vec.end(), pVecMarksInInventory->begin(), pVecMarksInInventory->end());
             for (auto it = vec.begin(); it != vec.end(); ++it) {
-              send_mark_event(tech_pvt, it->c_str(), true);
               switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "(%u) dub_speech_frame - Marker %s cleared\n",
                   tech_pvt->id, it->c_str());
+              send_mark_event(tech_pvt, it->c_str(), true);
             }
 
             // put the "in-use" ones into the "cleared" queue so we dont notify again when they eventually come through
@@ -982,11 +983,11 @@ extern "C" {
 
                 if (pVec == pVecInUse) {
                   send_mark_event(tech_pvt, name.c_str());
-                  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "(%u) dub_speech_frame - Marker %s detected in playout\n",
+                  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) dub_speech_frame - Marker %s detected in playout\n",
                     tech_pvt->id, name.c_str());
                 }
                 else {
-                  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "(%u) dub_speech_frame - Marker %s detected in playout but previously cleared\n",
+                  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) dub_speech_frame - Marker %s detected in playout but previously cleared\n",
                     tech_pvt->id, name.c_str());
                 }
               }
