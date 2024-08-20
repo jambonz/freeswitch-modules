@@ -1,5 +1,5 @@
 #include "audio_pipe.hpp"
-#include <switch.h>
+
 #include <cassert>
 #include <iostream>
 
@@ -229,19 +229,6 @@ int AudioPipe::lws_callback(struct lws *wsi,
 }
 
 
-// static members
-const bool ping_pong_enabled = switch_true(std::getenv("WS_PING_PONG_ENABLED"));
-static const lws_retry_bo_t retry = {
-    nullptr,// retry_ms_table
-    0,// retry_ms_table_count
-    0,// conceal_count
-    // secs_sinceq_valid_ping, if enabled, send ping after connection is idle for 10 seconds
-    ping_pong_enabled ? static_cast<uint16_t>(10) : static_cast<uint16_t>(UINT16_MAX),
-    // secs_since_valid_hangup, if enabled, kill the connection after 30 seconds without response pong
-    ping_pong_enabled ? static_cast<uint16_t>(30) : static_cast<uint16_t>(UINT16_MAX),
-    0// jitter_percent
-};
-
 struct lws_context *AudioPipe::context = nullptr;
 std::thread AudioPipe::serviceThread;
 std::mutex AudioPipe::mutex_connects;
@@ -377,6 +364,28 @@ bool AudioPipe::lws_service_thread() {
       1024,
     },
     { NULL, NULL, 0, 0 }
+  };
+
+  uint16_t secs_sinceq_valid_ping = UINT16_MAX;
+  uint16_t secs_since_valid_hangup = UINT16_MAX;
+
+  char* wsVar = std::getenv("WS_PING_INTERVAL");
+  if (wsVar != nullptr) {
+    secs_sinceq_valid_ping = std::atoi(wsVar);
+  }
+
+  wsVar = std::getenv("WS_NO_PONG_HANGUP_INTERVAL");
+  if (wsVar != nullptr) {
+    secs_since_valid_hangup = std::atoi(wsVar);
+  }
+
+  const lws_retry_bo_t retry = {
+    nullptr,                  // retry_ms_table
+    0,                        // retry_ms_table_count
+    0,                        // conceal_count
+    secs_sinceq_valid_ping,   // secs_sinceq_valid_ping
+    secs_since_valid_hangup,  // secs_since_valid_hangup
+    0                         // jitter_percent
   };
 
   memset(&info, 0, sizeof info); 
