@@ -198,6 +198,16 @@ cJSON* GRPCParser::parse(const AdvancedSettings_LoggingSettings& o) {
   return json;
 }
 
+cJSON* GRPCParser::parse(const SentimentAnalysisResult& o) {
+    cJSON * json = cJSON_CreateObject();
+
+    cJSON_AddNumberToObject(json, "score", o.score());
+    cJSON_AddNumberToObject(json, "magnitude", o.magnitude());
+
+  return json;
+}
+
+
 cJSON* GRPCParser::parse(const GcsDestination& o) {
   cJSON * json = cJSON_CreateObject();
 

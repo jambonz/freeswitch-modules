@@ -14,8 +14,9 @@
 #define DIALOGFLOW_CX_EVENT_ERROR "dialogflow_cx::error"
 
 #define MAX_LANG (12)
-#define MAX_PROJECT_ID (128)
+#define MAX_PROJECT_ID (256)
 #define MAX_PATHLEN (256)
+#define MAX_REGION (56)
 
 /* per-channel data */
 typedef void (*responseHandler_t)(switch_core_session_t* session, const char * type, char* json);
@@ -31,7 +32,9 @@ struct cap_cb {
 	switch_thread_t* thread;
 	char lang[MAX_LANG];
 	char projectId[MAX_PROJECT_ID];
-
+  char agentId[MAX_PROJECT_ID];
+  char environmentId[MAX_PROJECT_ID];
+  char region[MAX_REGION];
 };
 
 #endif

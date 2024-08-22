@@ -19,6 +19,8 @@
 #include "mod_dialogflow_cx.h"
 #include "parser.h"
 
+#define DEFAULT_INTENT "00000000-0000-0000-0000-000000000000"
+
 using google::cloud::dialogflow::cx::v3::Sessions;
 using google::cloud::dialogflow::cx::v3::StreamingDetectIntentRequest;
 using google::cloud::dialogflow::cx::v3::StreamingDetectIntentResponse;
@@ -112,12 +114,17 @@ void tokenize(std::string const &str, const char delim, std::vector<std::string>
 
 class GStreamer {
 public:
-    GStreamer(switch_core_session_t *session, const char* lang, char* projectId, char* event, char* text) :
-            m_lang(lang), m_sessionId(switch_core_session_get_uuid(session)), m_environment("draft"), m_regionId("us"),
-            m_speakingRate(), m_pitch(), m_volume(), m_voiceName(""), m_voiceGender(""), m_effects(""),
-            m_sentimentAnalysis(false), m_finished(false), m_packets(0) {
+    GStreamer(switch_core_session_t *session, const char* lang, char* region, char* projectId, char* agentId, 
+      char* environmentId, char* event, char* text) :
+      m_lang(lang), m_sessionId(switch_core_session_get_uuid(session)), m_agent(agentId), m_projectId(projectId),
+      m_environment( nullptr != environmentId ? environmentId : "draft"), m_regionId(nullptr != region ? region : "us"),
+      m_speakingRate(), m_pitch(), m_volume(), m_voiceName(""), m_voiceGender(""), m_effects(""),
+      m_sentimentAnalysis(false), m_finished(false), m_packets(0) {
 		const char* var;
 		switch_channel_t* channel = switch_core_session_get_channel(session);
+
+    // TOODO: handle via channel vars
+    /*
 		std::vector<std::string> tokens;
 		const char delim = ':';
 		tokenize(projectId, delim, tokens);
@@ -136,16 +143,17 @@ public:
 			else if (9 == idx && s.length() > 0) m_sentimentAnalysis = (s == "true");
 			idx++;
 		}
+    */
 
 		std::string endpoint = "dialogflow.googleapis.com";
 		if (0 != m_regionId.compare("us")) {
 			endpoint = m_regionId;
-			endpoint.append("-dialogflow.googleapis.com:443");
+			endpoint.append("-dialogflow.googleapis.com");
 		}
 
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, 
-			"GStreamer dialogflow endpoint is %s, region is %s, project is %s, environment is %s\n", 
-			endpoint.c_str(), m_regionId.c_str(), m_projectId.c_str(), m_environment.c_str());		
+			"GStreamer dialogflow endpoint is %s, region is %s, project is %s, agent is %s, environment is %s\n", 
+			endpoint.c_str(), m_regionId.c_str(), m_projectId.c_str(), m_agent.c_str(), m_environment.c_str());		
 
 		if (var = switch_channel_get_variable(channel, "GOOGLE_APPLICATION_CREDENTIALS")) {
 				auto callCreds = grpc::ServiceAccountJWTAccessCredentials(var, INT64_MAX);
@@ -172,8 +180,14 @@ public:
 		m_context= std::make_shared<grpc::ClientContext>();
 		m_stub = Sessions::NewStub(m_channel);
 
-		snprintf(szSession, 256, "projects/%s/locations/%s/agent/environments/%s/users/-/sessions/%s", 
+    if (0 == m_environment.compare("draft")) {
+  		snprintf(szSession, 256, "projects/%s/locations/%s/agents/%s/sessions/%s", 
+				m_projectId.c_str(), m_regionId.c_str(), m_agent.c_str(), m_sessionId.c_str());
+    }
+    else {
+  		snprintf(szSession, 256, "projects/%s/locations/%s/agents/%s/environments/%s/sessions/%s", 
 				m_projectId.c_str(), m_regionId.c_str(), m_environment.c_str(), m_sessionId.c_str());
+    }
 
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "GStreamer::startStream session %s, event %s, text %s %p\n", szSession, event, text, this);
 
@@ -190,21 +204,26 @@ public:
 			queryInput->set_language_code(m_lang.c_str());
 		}
 		else {
-			auto* audio_input = queryInput->mutable_audio();
-      auto* audio_config = audio_input->mutable_config();
-			audio_config->set_sample_rate_hertz(16000);
-      audio_config->set_enable_word_info(false);
-			audio_config->set_audio_encoding(AudioEncoding::AUDIO_ENCODING_LINEAR_16);
-			audio_config->set_single_utterance(false);
-
-      /**
-       * Note: there are other parameters that can be set in the audio config, such as:
-       * hints, model, model variant, barge in config
-       * 
-       */
-
-			queryInput->set_language_code(m_lang.c_str());
+      auto* intentInput = queryInput->mutable_intent();
+      intentInput->set_intent(DEFAULT_INTENT);
     }
+    /*
+    auto* audio_input = queryInput->mutable_audio();
+    auto* audio_config = audio_input->mutable_config();
+    audio_config->set_sample_rate_hertz(16000);
+    audio_config->set_enable_word_info(false);
+    audio_config->set_audio_encoding(AudioEncoding::AUDIO_ENCODING_LINEAR_16);
+    audio_config->set_single_utterance(false);
+    */
+  
+    /**
+     * Note: there are other parameters that can be set in the audio config, such as:
+     * hints, model, model variant, barge in config
+     * 
+     */
+
+    queryInput->set_language_code(m_lang.c_str());
+
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer::startStream checking OutputAudioConfig custom parameters: speaking rate %f,"
                                                             " pitch %f, volume %f, voice name '%s' gender '%s', effects '%s'\n", m_speakingRate,
                                                             m_pitch, m_volume, m_voiceName.c_str(), m_voiceGender.c_str(), m_effects.c_str());
@@ -254,6 +273,13 @@ public:
 
 		m_request->clear_query_input();
 		m_request->clear_query_params();
+
+    auto* audio_config = m_request->mutable_query_input()->mutable_audio()->mutable_config();
+    audio_config->set_sample_rate_hertz(16000);
+    audio_config->set_enable_word_info(false);
+    audio_config->set_audio_encoding(AudioEncoding::AUDIO_ENCODING_LINEAR_16);
+    audio_config->set_single_utterance(false);
+
     m_request->mutable_query_input()->mutable_audio()->set_audio(data, datalen);
 
 		m_packets++;
@@ -293,6 +319,7 @@ private:
 	std::shared_ptr<StreamingDetectIntentRequest> m_request;
 	std::string m_lang;
 	std::string m_projectId;
+  std::string m_agent;
 	std::string m_environment;
 	std::string m_regionId;
 	double m_speakingRate;
@@ -453,10 +480,13 @@ extern "C" {
 		responseHandler_t responseHandler, 
 		errorHandler_t errorHandler, 
 		uint32_t samples_per_second, 
-		char* lang, 
-		char* projectId, 
-		char* event, 
-		char* text,
+		char* lang,
+    char* region,
+		char* projectId,
+    char* agentId,
+    char* environmentId,
+    char* event,
+    char* text,
 		struct cap_cb **ppUserData
 	) {
 		switch_status_t status = SWITCH_STATUS_SUCCESS;
@@ -485,7 +515,10 @@ extern "C" {
 
 		strncpy(cb->lang, lang, MAX_LANG);
 		strncpy(cb->projectId, lang, MAX_PROJECT_ID);
-		cb->streamer = new GStreamer(session, lang, projectId, event, text);
+    strncpy(cb->agentId, agentId, MAX_PROJECT_ID);
+    if (nullptr != environmentId) strncpy(cb->environmentId, environmentId, MAX_PROJECT_ID);
+    if (nullptr != region) strncpy(cb->region, region, MAX_REGION);
+		cb->streamer = new GStreamer(session, lang, region, projectId, agentId, environmentId, event, text);
 		cb->resampler = speex_resampler_init(1, 8000, 16000, SWITCH_RESAMPLE_QUALITY, &err);
 		if (0 != err) {
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "%s: Error initializing resampler: %s.\n", 

@@ -6,10 +6,6 @@
 #include "mod_dialogflow_cx.h"
 #include "google_glue.h"
 
-#define DEFAULT_INTENT_TIMEOUT_SECS (30)
-#define DIALOGFLOW_INTENT "dialogflow_cx_intent"
-#define DIALOGFLOW_INTENT_AUDIO_FILE "dialogflow_cx_intent_audio_file"
-
 /* Prototypes */
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_dialogflow_cx_shutdown);
 SWITCH_MODULE_RUNTIME_FUNCTION(mod_dialogflow_cx_runtime);
@@ -74,7 +70,8 @@ static switch_bool_t capture_callback(switch_media_bug_t *bug, void *user_data, 
 	return SWITCH_TRUE;
 }
 
-static switch_status_t start_capture(switch_core_session_t *session, switch_media_bug_flag_t flags, char* lang, char*projectId, char* event, char* text)
+static switch_status_t start_capture(switch_core_session_t *session, switch_media_bug_flag_t flags, char* lang, char* region, char* projectId, 
+char *agentId, char *environmentId, char* event, char* text)
 {
 	switch_channel_t *channel = switch_core_session_get_channel(session);
 	switch_media_bug_t *bug;
@@ -83,7 +80,7 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
 	switch_status_t status = SWITCH_STATUS_SUCCESS;
 
 	if (switch_channel_get_private(channel, MY_BUG_NAME)) {
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "a dialogflow is already running on this channel, we will stop it.\n");
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "a dialogflow_cx is already running on this channel, we will stop it.\n");
 		do_stop(session);
 	}
 
@@ -93,18 +90,18 @@ static switch_status_t start_capture(switch_core_session_t *session, switch_medi
 		goto done;
 	}
 
-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "starting dialogflow with project %s, language %s, event %s, text %s.\n", 
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "starting dialogflow_cx with project %s, language %s, event %s, text %s.\n", 
 		projectId, lang, event, text);
 
 	switch_core_session_get_read_impl(session, &read_impl);
 	if (SWITCH_STATUS_FALSE == google_dialogflow_cx_session_init(session, responseHandler, errorHandler, 
-		read_impl.samples_per_second, lang, projectId, event, text, &cb)) {
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error initializing google dialogflow session.\n");
+		read_impl.samples_per_second, lang, region, projectId, agentId, environmentId, event, text, &cb)) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error initializing google dialogflow_cx session.\n");
 		status = SWITCH_STATUS_FALSE;
 		goto done;
 	}
 
-	if ((status = switch_core_media_bug_add(session, "dialogflow", NULL, capture_callback, (void *) cb, 0, flags, &bug)) != SWITCH_STATUS_SUCCESS) {
+	if ((status = switch_core_media_bug_add(session, MY_BUG_NAME, NULL, capture_callback, (void *) cb, 0, flags, &bug)) != SWITCH_STATUS_SUCCESS) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error adding bug.\n");
 		status = SWITCH_STATUS_FALSE;
 		goto done;
@@ -127,15 +124,15 @@ static switch_status_t do_stop(switch_core_session_t *session)
 	switch_media_bug_t *bug = switch_channel_get_private(channel, MY_BUG_NAME);
 
 	if (bug) {
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Received user command command to stop dialogflow.\n");
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Received user command command to stop dialogflow_cx.\n");
 		status = google_dialogflow_cx_session_stop(session, 0);
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "stopped dialogflow.\n");
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "stopped dialogflow_cx.\n");
 	}
 
 	return status;
 }
 
-#define DIALOGFLOW_API_START_SYNTAX "<uuid> project-id lang-code [event]"
+#define DIALOGFLOW_API_START_SYNTAX "<uuid> region project-id agent-id environment-id lang-code [event] [text]"
 SWITCH_STANDARD_API(dialogflow_cx_api_start_function)
 {
 	char *mycmd = NULL, *argv[10] = { 0 };
@@ -148,7 +145,7 @@ SWITCH_STANDARD_API(dialogflow_cx_api_start_function)
 		argc = switch_separate_string(mycmd, ' ', argv, (sizeof(argv) / sizeof(argv[0])));
 	}
 
-	if (zstr(cmd) || argc < 3) {
+	if (zstr(cmd) || argc < 6) {
 		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Error with command %s %s %s.\n", cmd, argv[0], argv[1]);
 		stream->write_function(stream, "-USAGE: %s\n", DIALOGFLOW_API_START_SYNTAX);
 		goto done;
@@ -158,18 +155,27 @@ SWITCH_STANDARD_API(dialogflow_cx_api_start_function)
 		if ((lsession = switch_core_session_locate(argv[0]))) {
 			char *event = NULL;
 			char *text = NULL;
-			char *projectId = argv[1];
-			char *lang = argv[2];
-			if (argc > 3) {
-				event = argv[3];
-			}
-			if (argc > 4) {
+      char *region = argv[1];
+			char *projectId = argv[2];
+      char *agentId = argv[3];
+      char *environmentId = argv[4];
+			char *lang = argv[5];
+      if (0 == strcmp("default", environmentId)) {
+        environmentId = NULL;
+      }
+      if (0 == strcmp("default", region)) {
+        region = NULL;
+      }
+			if (argc > 6) {
+				event = argv[6];
 				if (0 == strcmp("none", event)) {
 					event = NULL;
 				}
-				text = argv[4];
 			}
-			status = start_capture(lsession, flags, lang, projectId, event, text);
+			if (argc > 7) {
+				text = argv[6];
+			}
+			status = start_capture(lsession, flags, lang, region, projectId, agentId, environmentId, event, text);
 			switch_core_session_rwunlock(lsession);
 		}
 	}
@@ -265,12 +271,12 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_dialogflow_cx_load)
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "Google Dialogflow CX API successfully loaded\n");
 
 	SWITCH_ADD_API(api_interface, "dialogflow_cx_start", "Start a google dialogflow cx", dialogflow_cx_api_start_function, DIALOGFLOW_API_START_SYNTAX);
-	SWITCH_ADD_API(api_interface, "dialogflow_CX_stop", "Terminate a google dialogflow cx", dialogflow_cx_api_stop_function, DIALOGFLOW_API_STOP_SYNTAX);
+	SWITCH_ADD_API(api_interface, "dialogflow_cx_stop", "Terminate a google dialogflow cx", dialogflow_cx_api_stop_function, DIALOGFLOW_API_STOP_SYNTAX);
 
-	switch_console_set_complete("add dialogflow_stop_cx");
-	switch_console_set_complete("add dialogflow_start_cx project lang");
-	switch_console_set_complete("add dialogflow_start_cx project lang timeout-secs");
-	switch_console_set_complete("add dialogflow_start_cx project lang timeout-secs event");
+	switch_console_set_complete("add dialogflow_cx_stop");
+	switch_console_set_complete("add dialogflow_cx_start project lang");
+	switch_console_set_complete("add dialogflow_cx_start project lang timeout-secs");
+	switch_console_set_complete("add dialogflow_cx_start project lang timeout-secs event");
 
 	/* indicate that the module should continue to be loaded */
 	return SWITCH_STATUS_SUCCESS;
