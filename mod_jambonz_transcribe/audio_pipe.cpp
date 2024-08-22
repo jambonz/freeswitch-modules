@@ -229,16 +229,6 @@ int AudioPipe::lws_callback(struct lws *wsi,
 }
 
 
-// static members
-static const lws_retry_bo_t retry = {
-    nullptr,   // retry_ms_table
-    0,         // retry_ms_table_count
-    0,         // conceal_count
-    UINT16_MAX,         // secs_since_valid_ping
-    UINT16_MAX,        // secs_since_valid_hangup
-    0          // jitter_percent
-};
-
 struct lws_context *AudioPipe::context = nullptr;
 std::thread AudioPipe::serviceThread;
 std::mutex AudioPipe::mutex_connects;
@@ -374,6 +364,28 @@ bool AudioPipe::lws_service_thread() {
       1024,
     },
     { NULL, NULL, 0, 0 }
+  };
+
+  uint16_t secs_sinceq_valid_ping = UINT16_MAX;
+  uint16_t secs_since_valid_hangup = UINT16_MAX;
+
+  char* wsVar = std::getenv("WS_PING_INTERVAL");
+  if (wsVar != nullptr) {
+    secs_sinceq_valid_ping = std::atoi(wsVar);
+  }
+
+  wsVar = std::getenv("WS_NO_PONG_HANGUP_INTERVAL");
+  if (wsVar != nullptr) {
+    secs_since_valid_hangup = std::atoi(wsVar);
+  }
+
+  const lws_retry_bo_t retry = {
+    nullptr,                  // retry_ms_table
+    0,                        // retry_ms_table_count
+    0,                        // conceal_count
+    secs_sinceq_valid_ping,   // secs_sinceq_valid_ping
+    secs_since_valid_hangup,  // secs_since_valid_hangup
+    0                         // jitter_percent
   };
 
   memset(&info, 0, sizeof info); 
