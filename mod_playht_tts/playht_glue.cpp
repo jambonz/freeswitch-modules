@@ -774,7 +774,7 @@ extern "C" {
       cJSON_AddStringToObject(jResult, "quality", p->quality);
     }
     if (p->speed) {
-      cJSON_AddNumberToObject(jResult, "speed", atoi(p->speed));
+      cJSON_AddNumberToObject(jResult, "speed", atof(p->speed));
     }
     if (p->seed) {
       cJSON_AddNumberToObject(jResult, "seed", atoi(p->seed));
