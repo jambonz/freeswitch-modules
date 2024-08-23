@@ -378,7 +378,10 @@ switch_status_t playht_parse_text(const std::map<std::string, std::string>& para
     cJSON_AddStringToObject(jResult, "quality", quality.c_str());
   }
   if (!speed.empty()) {
-    cJSON_AddNumberToObject(jResult, "speed", atoi(speed.c_str()));
+      double val = strtod(speed.c_str(), NULL);
+      if (val != 0.0) {
+        cJSON_AddNumberToObject(jResult, "speed", val);
+      }
   }
   if (!seed.empty()) {
     cJSON_AddNumberToObject(jResult, "seed", atoi(seed.c_str()));
