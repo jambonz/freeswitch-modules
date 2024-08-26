@@ -304,7 +304,7 @@ namespace {
           cJSON* name = cJSON_GetObjectItem(data, "name");
           if (cJSON_IsString(name) && name->valuestring) {
             if (markCountExceeded(tech_pvt)) {
-              switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "(%u) processIncomingMessage - mark count exceeded, discarding mark %s\n", tech_pvt->id, name.c_str());
+              switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "(%u) processIncomingMessage - mark count exceeded, discarding mark %s\n", tech_pvt->id, cJSON_GetStringValue(name));
             }
             else {
               if (nullptr == tech_pvt->pVecMarksInInventory) {
@@ -976,18 +976,20 @@ extern "C" {
         //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) dub_speech_frame - samples to copy %u\n", tech_pvt->id, samplesToCopy); 
 
         bool hasMarkers = false;
-         std::deque<std::string>* pVecInUse = nullptr;
+        std::deque<std::string>* pVecInventory = nullptr;
+        std::deque<std::string>* pVecInUse = nullptr;
         std::deque<std::string>* pVecCleared = nullptr;
         if (nullptr != tech_pvt->pVecMarksInUse) {
+          pVecInventory = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInInventory);
           pVecInUse = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInUse);
           pVecCleared = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksCleared);
           hasMarkers = pVecInUse->size() + pVecCleared->size() >  0;
         }
+
         if (hasMarkers) {
           /* discard markers and send notifications */
           auto bufferIter = cBuffer->begin();
           auto dataIter = data;
-
           for (int i = 0; i < samplesToCopy; ++i) {
             if (*bufferIter == AUDIO_MARKER) {
               // Marker detected, discard it and send a notice unless it was previously cleared
@@ -1030,6 +1032,14 @@ extern "C" {
 
           if (samplesToCopy > 0) {
             vector_add(fp, data, rframe->samples);
+          } else if (pVecInventory != nullptr && pVecInventory->size()) {
+            // no bidirectional audio to dub but still have some mark in inventory, send them now
+            auto name = pVecInventory->front();
+            pVecInventory->pop_front();
+
+            send_mark_event(tech_pvt, name.c_str());
+            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%u) dub_speech_frame - Marker %s detected in inventory\n",
+              tech_pvt->id, name.c_str());
           }
         }
         vector_normalize(fp, rframe->samples);

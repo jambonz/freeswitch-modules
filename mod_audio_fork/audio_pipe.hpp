@@ -130,7 +130,7 @@ namespace drachtio {
     std::string m_bugname;
     unsigned int m_port;
     std::string m_path;
-    std::string m_metadata;
+    std::list<std::string> m_metadata_list;
     std::mutex m_text_mutex;
     std::mutex m_audio_mutex;
     int m_sslFlags;
