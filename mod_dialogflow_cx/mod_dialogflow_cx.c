@@ -71,7 +71,7 @@ static switch_bool_t capture_callback(switch_media_bug_t *bug, void *user_data, 
 }
 
 static switch_status_t start_capture(switch_core_session_t *session, switch_media_bug_flag_t flags, char* lang, char* region, char* projectId, 
-char *agentId, char *environmentId, char* event, char* text)
+char *agentId, char *environmentId, char* intent)
 {
 	switch_channel_t *channel = switch_core_session_get_channel(session);
 	switch_media_bug_t *bug;
@@ -90,12 +90,12 @@ char *agentId, char *environmentId, char* event, char* text)
 		goto done;
 	}
 
-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "starting dialogflow_cx with project %s, language %s, event %s, text %s.\n", 
-		projectId, lang, event, text);
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "starting dialogflow_cx with project %s, language %s, intent %s\n", 
+		projectId, lang, intent);
 
 	switch_core_session_get_read_impl(session, &read_impl);
 	if (SWITCH_STATUS_FALSE == google_dialogflow_cx_session_init(session, responseHandler, errorHandler, 
-		read_impl.samples_per_second, lang, region, projectId, agentId, environmentId, event, text, &cb)) {
+		read_impl.samples_per_second, lang, region, projectId, agentId, environmentId, intent, &cb)) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error initializing google dialogflow_cx session.\n");
 		status = SWITCH_STATUS_FALSE;
 		goto done;
@@ -132,7 +132,7 @@ static switch_status_t do_stop(switch_core_session_t *session)
 	return status;
 }
 
-#define DIALOGFLOW_API_START_SYNTAX "<uuid> region project-id agent-id environment-id lang-code [event] [text]"
+#define DIALOGFLOW_API_START_SYNTAX "<uuid> region project-id agent-id environment-id lang-code [intent]"
 SWITCH_STANDARD_API(dialogflow_cx_api_start_function)
 {
 	char *mycmd = NULL, *argv[10] = { 0 };
@@ -153,8 +153,7 @@ SWITCH_STANDARD_API(dialogflow_cx_api_start_function)
 		switch_core_session_t *lsession = NULL;
 
 		if ((lsession = switch_core_session_locate(argv[0]))) {
-			char *event = NULL;
-			char *text = NULL;
+			char *intent = NULL;
       char *region = argv[1];
 			char *projectId = argv[2];
       char *agentId = argv[3];
@@ -167,15 +166,12 @@ SWITCH_STANDARD_API(dialogflow_cx_api_start_function)
         region = NULL;
       }
 			if (argc > 6) {
-				event = argv[6];
-				if (0 == strcmp("none", event)) {
-					event = NULL;
+				intent = argv[6];
+				if (0 == strcmp("none", intent)) {
+					intent = NULL;
 				}
 			}
-			if (argc > 7) {
-				text = argv[6];
-			}
-			status = start_capture(lsession, flags, lang, region, projectId, agentId, environmentId, event, text);
+			status = start_capture(lsession, flags, lang, region, projectId, agentId, environmentId, intent);
 			switch_core_session_rwunlock(lsession);
 		}
 	}

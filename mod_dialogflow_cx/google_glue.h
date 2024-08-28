@@ -13,8 +13,7 @@ switch_status_t google_dialogflow_cx_session_init(
 		char* projectId,
     char* agentId,
     char* environmentId,
-    char* event,
-    char* text,
+    char* intent,
 		struct cap_cb **ppUserData);
 switch_status_t google_dialogflow_cx_session_stop(switch_core_session_t *session, int channelIsClosing);
 switch_bool_t google_dialogflow_cx_frame(switch_media_bug_t *bug, void* user_data);
