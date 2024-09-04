@@ -227,20 +227,21 @@ int AudioPipe::lws_callback(struct lws *wsi,
         // check for text frames to send
         {
           std::lock_guard<std::mutex> lk(ap->m_text_mutex);
-          if (ap->m_metadata.length() > 0) {
-            uint8_t buf[ap->m_metadata.length() + LWS_PRE];
-            memcpy(buf + LWS_PRE, ap->m_metadata.c_str(), ap->m_metadata.length());
-            int n = ap->m_metadata.length();
+          if (!ap->m_metadata_list.empty()) {
+            const std::string& message = ap->m_metadata_list.front();
+            uint8_t buf[message.length() + LWS_PRE];
+            memcpy(buf + LWS_PRE, message.c_str(), message.length());
+            int n = message.length();
             int m = lws_write(wsi, buf + LWS_PRE, n, LWS_WRITE_TEXT);
-            ap->m_metadata.clear();
+
             if (m < n) {
-              return -1;
+              return -1; // Failed to send the full message
             }
 
-            // there may be audio data, but only one write per writeable event
-            // get it next time
+            // Remove the message that was successfully sent
+            ap->m_metadata_list.pop_front();
+            // Request another writable event if there are more messages
             lws_callback_on_writable(wsi);
-
             return 0;
           }
         }
@@ -529,7 +530,7 @@ void AudioPipe::bufferForSending(const char* text) {
   if (m_state != LWS_CLIENT_CONNECTED) return;
   {
     std::lock_guard<std::mutex> lk(m_text_mutex);
-    m_metadata.append(text);
+    m_metadata_list.emplace_back(text);
   }
   addPendingWrite(this);
 }
