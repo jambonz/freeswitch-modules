@@ -52,7 +52,7 @@ ep.api('aws_transcribe', `${ep.uuid} start en-US interim`);
 ```
 
 ## Building
-You will need to build the AWS C++ SDK.  You can use [this ansible role](https://github.com/davehorton/ansible-role-fsmrf), or refer to the specific steps [here](https://github.com/davehorton/ansible-role-fsmrf/blob/a1947cc24e89dee7d6b42053c53295f9198340c1/tasks/grpc.yml#L28).
+This uses the AWS websocket api.
 
 ## Examples
 [aws_transcribe.js](../../examples/aws_transcribe.js)
