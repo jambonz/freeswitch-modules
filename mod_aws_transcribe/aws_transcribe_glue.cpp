@@ -34,7 +34,6 @@ namespace {
   static unsigned int idxCallCount = 0;
   static uint32_t playCount = 0;
 
-  //static const char* emptyTranscript = "{\"alternatives\":[{\"transcript\":\"\",\"confidence\":0.0,\"words\":[]}]}";
   static const char* emptyTranscript = "{\"Transcript\":{\"Results\":[]}}";
   static const char* messageStart = "{\"Message\":";
 
@@ -71,11 +70,12 @@ namespace {
     }
   }
 
-  static void eventCallback(const char* sessionId, aws::AudioPipe::NotifyEvent_t event, const char* message, bool finished) {
+  static void eventCallback(const char* sessionId, const char* bugname, 
+    aws::AudioPipe::NotifyEvent_t event, const char* message, bool finished) {
     switch_core_session_t* session = switch_core_session_locate(sessionId);
     if (session) {
       switch_channel_t *channel = switch_core_session_get_channel(session);
-      switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, MY_BUG_NAME);
+      switch_media_bug_t *bug = (switch_media_bug_t*) switch_channel_get_private(channel, bugname);
       if (bug) {
         private_t* tech_pvt = (private_t*) switch_core_media_bug_get_user_data(bug);
         if (tech_pvt) {
@@ -240,6 +240,8 @@ extern "C" {
       shouldIdentifyPII,
       languageModelName
     );
+
+    host = host.substr(0, host.find(':'));
 		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "connecting to host %s, path %s\n", host.c_str(), path.c_str());
 
     strncpy(tech_pvt->sessionId, switch_core_session_get_uuid(session), MAX_SESSION_ID);
@@ -253,7 +255,7 @@ extern "C" {
 
     size_t buflen = LWS_PRE + (FRAME_SIZE_8000 * desiredSampling / 8000 * channels * 1000 / RTP_PACKETIZATION_PERIOD * nAudioBufferSecs);
 
-    aws::AudioPipe* ap = new aws::AudioPipe(tech_pvt->sessionId, tech_pvt->host, tech_pvt->port, tech_pvt->path, 
+    aws::AudioPipe* ap = new aws::AudioPipe(tech_pvt->sessionId, tech_pvt->bugname, tech_pvt->host, tech_pvt->port, tech_pvt->path, 
       buflen, read_impl.decoded_bytes_per_packet, eventCallback);
     if (!ap) {
       switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Error allocating AudioPipe\n");

@@ -1,6 +1,8 @@
 #include "transcribe_manager.hpp"
 #include "crc.h"
 
+#include <switch.h>
+
 #include <openssl/sha.h>
 #include <openssl/hmac.h>
 #include <iomanip>
@@ -108,6 +110,7 @@ void TranscribeManager::getSignedWebsocketUrl(string& host, string& path, const 
        + signed_headers + '\n'
        + payload_hash;
 
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"TranscribeManager::getSignedWebsocketUrl canonical_request: %s\n", canonical_request.c_str());
     string string_to_sign = algorithm + "\n"
        + amzDate + "\n"
        + regex_replace(credential_scope, regex("%2F"), "/") + "\n"

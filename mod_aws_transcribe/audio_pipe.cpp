@@ -2,6 +2,8 @@
 #include "transcribe_manager.hpp"
 #include "crc.h"
 
+#include <switch.h>
+
 #include <cassert>
 #include <iostream>
 #include <netinet/in.h>
@@ -78,13 +80,13 @@ int AudioPipe::aws_lws_callback(struct lws *wsi,
       {
         AudioPipe* ap = findAndRemovePendingConnect(wsi);
         int rc = lws_http_client_http_response(wsi);
-        lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_CONNECTION_ERROR: %s, response status %d\n", in ? (char *)in : "(null)", rc); 
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_CONNECTION_ERROR: %s, response status %d\n", in ? (char *)in : "(null)", rc); 
         if (ap) {
           ap->m_state = LWS_CLIENT_FAILED;
-          ap->m_callback(ap->m_uuid.c_str(), AudioPipe::CONNECT_FAIL, (char *) in, ap->isFinished());
+          ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::CONNECT_FAIL, (char *) in, ap->isFinished());
         }
         else {
-          lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_CONNECTION_ERROR unable to find wsi %p..\n", wsi); 
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_ESTABLISHED %s unable to find wsi %p..\n", ap->m_uuid.c_str(), wsi); 
         }
       }      
       break;
@@ -96,7 +98,8 @@ int AudioPipe::aws_lws_callback(struct lws *wsi,
           *ppAp = ap;
           ap->m_vhd = vhd;
           ap->m_state = LWS_CLIENT_CONNECTED;
-          ap->m_callback(ap->m_uuid.c_str(), AudioPipe::CONNECT_SUCCESS, NULL,  ap->isFinished());
+          ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::CONNECT_SUCCESS, NULL,  ap->isFinished());
+          //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO,"%s connected\n", ap->m_uuid.c_str());
         }
         else {
           lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_ESTABLISHED %s unable to find wsi %p..\n", ap->m_uuid.c_str(), wsi); 
@@ -107,19 +110,19 @@ int AudioPipe::aws_lws_callback(struct lws *wsi,
       {
         AudioPipe* ap = *ppAp;
         if (!ap) {
-          lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_CLOSED %s unable to find wsi %p..\n", ap->m_uuid.c_str(), wsi); 
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_CLOSED %s unable to find wsi %p..\n", ap->m_uuid.c_str(), wsi); 
           return 0;
         }
         if (ap->m_state == LWS_CLIENT_DISCONNECTING) {
           // closed by us
 
           lwsl_debug("%s socket closed by us\n", ap->m_uuid.c_str());
-          ap->m_callback(ap->m_uuid.c_str(), AudioPipe::CONNECTION_CLOSED_GRACEFULLY, NULL,  ap->isFinished());
+          ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::CONNECTION_CLOSED_GRACEFULLY, NULL,  ap->isFinished());
         }
         else if (ap->m_state == LWS_CLIENT_CONNECTED) {
           // closed by far end
-          lwsl_info("%s socket closed by far end\n", ap->m_uuid.c_str());
-          ap->m_callback(ap->m_uuid.c_str(), AudioPipe::CONNECTION_DROPPED, NULL,  ap->isFinished());
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO,"%s socket closed by far end\n", ap->m_uuid.c_str());
+          ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::CONNECTION_DROPPED, NULL,  ap->isFinished());
         }
         ap->m_state = LWS_CLIENT_DISCONNECTED;
         ap->setClosed();
@@ -136,7 +139,7 @@ int AudioPipe::aws_lws_callback(struct lws *wsi,
       {
         AudioPipe* ap = *ppAp;
         if (!ap) {
-          lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE %s unable to find wsi %p..\n", ap->m_uuid.c_str(), wsi); 
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE %s unable to find wsi %p..\n", ap->m_uuid.c_str(), wsi); 
           return 0;
         }
 
@@ -157,7 +160,7 @@ int AudioPipe::aws_lws_callback(struct lws *wsi,
             free(ap->m_recv_buf);
             ap->m_recv_buf = ap->m_recv_buf_ptr = nullptr;
             ap->m_recv_buf_len = 0;
-            lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE max buffer exceeded, truncating message.\n");
+            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE max buffer exceeded, truncating message.\n");
           }
           else {
             ap->m_recv_buf = (uint8_t*) realloc(ap->m_recv_buf, newlen);
@@ -174,18 +177,20 @@ int AudioPipe::aws_lws_callback(struct lws *wsi,
             ap->m_recv_buf_ptr += len;
           }
           if (lws_is_final_fragment(wsi)) {
-            //lwsl_err("AudioPipe::lws_service_thread - LWS_CALLBACK_CLIENT_RECEIVE received %d bytes.\n", len);
+            //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "AudioPipe::lws_service_thread - LWS_CALLBACK_CLIENT_RECEIVE received %d bytes.\n", len);
             if (nullptr != ap->m_recv_buf) {
               bool isError = false;
               std::string payload;
               std::string msg((char *)ap->m_recv_buf, ap->m_recv_buf_ptr - ap->m_recv_buf);
 
               TranscribeManager::parseResponse(msg, payload, isError, true);
-              //lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE payload: %s.\n", payload.c_str());
-              //lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE response %s.\n", msg.c_str());
+              //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE payload: %s.\n", payload.c_str());
+              //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE response %s.\n", msg.c_str());
 
 
-              ap->m_callback(ap->m_uuid.c_str(), AudioPipe::MESSAGE, payload.c_str(),  ap->isFinished());
+              if (0 != payload.compare(0, "{\"Transcript\":{\"Results\":[]}}")) {
+                ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::MESSAGE, payload.c_str(),  ap->isFinished());
+              }
               if (nullptr != ap->m_recv_buf) free(ap->m_recv_buf);
             }
             ap->m_recv_buf = ap->m_recv_buf_ptr = nullptr;
@@ -199,7 +204,7 @@ int AudioPipe::aws_lws_callback(struct lws *wsi,
       {
         AudioPipe* ap = *ppAp;
         if (!ap) {
-          lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_WRITEABLE %s unable to find wsi %p..\n", ap->m_uuid.c_str(), wsi); 
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,"AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_WRITEABLE %s unable to find wsi %p..\n", ap->m_uuid.c_str(), wsi); 
           return 0;
         }
 
@@ -249,14 +254,15 @@ int AudioPipe::aws_lws_callback(struct lws *wsi,
             ap->m_audio_buffer_write_offset + sizeof(uint32_t);
 
             size_t datalen = ap->m_audio_buffer_write_offset - LWS_PRE + 4;
-            //lwsl_err("AudioPipe - datalen %u (decimal)\n", datalen);
+            
+            //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO,"%s writing data length %lu\n", ap->m_uuid.c_str(), datalen);
 
             // TMP: write data to a file
             //writeToFile((const char *) ap->m_audio_buffer + LWS_PRE, datalen);
 
             int sent = lws_write(wsi, (unsigned char *) ap->m_audio_buffer + LWS_PRE, datalen, LWS_WRITE_BINARY);
             if (sent < datalen) {
-              lwsl_err("AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_WRITEABLE %s attemped to send %lu only sent %d wsi %p..\n", 
+              switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_WRITEABLE %s attemped to send %lu only sent %d wsi %p..\n", 
                 ap->m_uuid.c_str(), datalen, sent, wsi); 
             }
             ap->binaryWritePtrResetToZero();
@@ -444,7 +450,7 @@ bool AudioPipe::lws_service_thread(unsigned int nServiceThread) {
   info.timeout_secs_ah_idle = 10;       // secs to allow a client to hold an ah without using it
   info.retry_and_idle_policy = &retry;
 
-  lwsl_notice("AudioPipe::lws_service_thread creating context in service thread %d.\n", nServiceThread);
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO,"AudioPipe::lws_service_thread creating context\n");
 
   contexts[nServiceThread] = lws_create_context(&info);
   if (!contexts[nServiceThread]) {
@@ -473,7 +479,7 @@ void AudioPipe::initialize(unsigned int nThreads, int loglevel, log_emit_functio
   numContexts = nThreads;
   lws_set_log_level(loglevel, logger);
 
-  lwsl_notice("AudioPipe::initialize starting %d threads\n", nThreads); 
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"AudioPipe::initialize starting\n"); 
   for (unsigned int i = 0; i < numContexts; i++) {
     std::lock_guard<std::mutex> lock(mapMutex);
     std::thread t(&AudioPipe::lws_service_thread, i);
@@ -484,7 +490,7 @@ void AudioPipe::initialize(unsigned int nThreads, int loglevel, log_emit_functio
 }
 
 bool AudioPipe::deinitialize() {
-  lwsl_notice("AudioPipe::deinitialize\n"); 
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE,"AudioPipe::deinitialize\n"); 
   std::lock_guard<std::mutex> lock(mapMutex);
   if (!threadIds.empty()) {
       std::thread::id id = threadIds.front();
@@ -501,9 +507,9 @@ bool AudioPipe::deinitialize() {
 }
 
 // instance members
-AudioPipe::AudioPipe(const char* uuid, const char* host, unsigned int port, const char* path,
+AudioPipe::AudioPipe(const char* uuid, const char* bugname, const char* host, unsigned int port, const char* path,
   size_t bufLen, size_t minFreespace, notifyHandler_t callback) :
-  m_uuid(uuid), m_host(host), m_port(port), m_path(path), m_finished(false),
+  m_uuid(uuid), m_host(host), m_port(port), m_path(path), m_finished(false), m_bugname(bugname),
   m_audio_buffer_min_freespace(minFreespace), m_audio_buffer_max_len(bufLen), m_gracefulShutdown(false),
   m_recv_buf(nullptr), m_recv_buf_ptr(nullptr),
   m_state(LWS_CLIENT_IDLE), m_wsi(nullptr), m_vhd(nullptr), m_callback(callback) {
@@ -569,7 +575,7 @@ bool AudioPipe::connect_client(struct lws_per_vhost_data *vhd) {
   m_vhd = vhd;
 
   m_wsi = lws_client_connect_via_info(&i);
-  lwsl_debug("%s attempting connection, wsi is %p\n", m_uuid.c_str(), m_wsi);
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG,"%s attempting connection, wsi is %p\n", m_uuid.c_str(), m_wsi);
 
   return nullptr != m_wsi;
 }
