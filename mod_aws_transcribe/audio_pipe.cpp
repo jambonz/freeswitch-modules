@@ -188,7 +188,7 @@ int AudioPipe::aws_lws_callback(struct lws *wsi,
               //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "AudioPipe::lws_service_thread LWS_CALLBACK_CLIENT_RECEIVE response %s.\n", msg.c_str());
 
 
-              if (0 != payload.compare(0, "{\"Transcript\":{\"Results\":[]}}")) {
+              if (0 != payload.compare("{\"Transcript\":{\"Results\":[]}}")) {
                 ap->m_callback(ap->m_uuid.c_str(), ap->m_bugname.c_str(), AudioPipe::MESSAGE, payload.c_str(),  ap->isFinished());
               }
               if (nullptr != ap->m_recv_buf) free(ap->m_recv_buf);
