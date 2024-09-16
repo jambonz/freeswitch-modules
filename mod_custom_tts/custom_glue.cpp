@@ -451,11 +451,11 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
       return 0;
     }
 
-    /* cache file will stay in the mp3 format for size (smaller) and simplicity */
-    if (conn->file) fwrite(data, sizeof(uint8_t), bytes_received, conn->file);
-
     pcm_data = convert_mp3_to_linear(conn, data, bytes_received);
     size_t bytesResampled = pcm_data.size() * sizeof(uint16_t);
+
+    /* cache same data to avoid streaming and cached audio quality is different*/
+    if (conn->file) fwrite(pcm_data.data(), sizeof(uint8_t), bytesResampled, conn->file);
 
     // Resize the buffer if necessary
     if (cBuffer->capacity() - cBuffer->size() < (bytesResampled / sizeof(uint16_t))) {
