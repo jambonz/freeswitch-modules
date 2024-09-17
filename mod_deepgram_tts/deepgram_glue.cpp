@@ -65,6 +65,32 @@ std::string secondsToMillisecondsString(double seconds) {
     return std::to_string(milliseconds_long);
 }
 
+static std::string getEnvVar(const std::string& varName) {
+    const char* val = std::getenv(varName.c_str());
+    return val ? std::string(val) : "";
+}
+
+static long getConnectionTimeout() {
+    auto getEnvVar = [](const std::string& varName) -> std::string {
+        const char* val = std::getenv(varName.c_str());
+        return val ? std::string(val) : "";
+    };
+
+    std::string connectTimeoutStr = getEnvVar("DEEPGRAM_TTS_CURL_CONNECT_TIMEOUT");
+
+    if (connectTimeoutStr.empty()) {
+        connectTimeoutStr = getEnvVar("TTS_CURL_CONNECT_TIMEOUT");
+    }
+
+    long connectTimeout = 10L;
+
+    if (!connectTimeoutStr.empty()) {
+        connectTimeout = std::stol(connectTimeoutStr);
+    }
+
+    return connectTimeout;
+}
+
 static CURL* createEasyHandle(void) {
   CURL* easy = curl_easy_init();
   if(!easy) {
@@ -77,7 +103,7 @@ static CURL* createEasyHandle(void) {
 
   // set connect timeout to 3 seconds and total timeout to 109 seconds
   curl_easy_setopt(easy, CURLOPT_CONNECTTIMEOUT_MS, 3000L);
-  curl_easy_setopt(easy, CURLOPT_TIMEOUT, 10L);
+  curl_easy_setopt(easy, CURLOPT_TIMEOUT, getConnectionTimeout());
 
   return easy ;    
 }
