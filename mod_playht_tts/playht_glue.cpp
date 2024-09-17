@@ -70,11 +70,6 @@ static std::string getEnvVar(const std::string& varName) {
 }
 
 static long getConnectionTimeout() {
-    auto getEnvVar = [](const std::string& varName) -> std::string {
-        const char* val = std::getenv(varName.c_str());
-        return val ? std::string(val) : "";
-    };
-
     std::string connectTimeoutStr = getEnvVar("PLAYHT_TTS_CURL_CONNECT_TIMEOUT");
 
     if (connectTimeoutStr.empty()) {
