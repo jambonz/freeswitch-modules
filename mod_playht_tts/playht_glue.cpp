@@ -64,6 +64,27 @@ std::string secondsToMillisecondsString(double seconds) {
     return std::to_string(milliseconds_long);
 }
 
+static std::string getEnvVar(const std::string& varName) {
+    const char* val = std::getenv(varName.c_str());
+    return val ? std::string(val) : "";
+}
+
+static long getConnectionTimeout() {
+    std::string connectTimeoutStr = getEnvVar("PLAYHT_TTS_CURL_CONNECT_TIMEOUT");
+
+    if (connectTimeoutStr.empty()) {
+        connectTimeoutStr = getEnvVar("TTS_CURL_CONNECT_TIMEOUT");
+    }
+
+    long connectTimeout = 20L;
+
+    if (!connectTimeoutStr.empty()) {
+        connectTimeout = std::stol(connectTimeoutStr);
+    }
+
+    return connectTimeout;
+}
+
 static CURL* createEasyHandle(void) {
   CURL* easy = curl_easy_init();
   if(!easy) {
@@ -77,9 +98,9 @@ static CURL* createEasyHandle(void) {
   // set connect timeout to 3 seconds and total timeout to 109 seconds
   curl_easy_setopt(easy, CURLOPT_CONNECTTIMEOUT_MS, 3000L);
   //For long text, PlayHT took more than 20 seconds to complete the download.
-  curl_easy_setopt(easy, CURLOPT_TIMEOUT, 60L);
+  curl_easy_setopt(easy, CURLOPT_TIMEOUT, getConnectionTimeout());
 
-  return easy ;    
+  return easy ;
 }
 
 static void cleanupConn(ConnInfo_t *conn) {
