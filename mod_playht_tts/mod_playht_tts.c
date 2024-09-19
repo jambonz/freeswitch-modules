@@ -27,7 +27,8 @@ static void clearPlayht(playht_t* p, int freeAll) {
   if (p->connect_time_ms) free(p->connect_time_ms);
   if (p->final_response_time_ms) free(p->final_response_time_ms);
   if (p->cache_filename) free(p->cache_filename);
-  
+  if (p->url) free(p->url);
+
 
   p->api_key = NULL;
   p->user_id = NULL;
@@ -48,6 +49,7 @@ static void clearPlayht(playht_t* p, int freeAll) {
   p->connect_time_ms = NULL;
   p->final_response_time_ms = NULL;
   p->cache_filename = NULL;
+  p->url = NULL;
 
   if (freeAll) {
     if (p->voice_name) free(p->voice_name);
@@ -58,7 +60,7 @@ static void clearPlayht(playht_t* p, int freeAll) {
 }
 
 static playht_t * createOrRetrievePrivateData(switch_speech_handle_t *sh) {
-  playht_t *p = (playht_t *) sh->private_info;  
+  playht_t *p = (playht_t *) sh->private_info;
   if (!p) {
     p = switch_core_alloc(sh->memory_pool, sizeof(*p));
   	sh->private_info = p;

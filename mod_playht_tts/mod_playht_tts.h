@@ -3,18 +3,28 @@
 
 #include <switch.h>
 typedef struct playht_data {
-  char *voice_name;
-  char *api_key;
+  /* authentication */
   char *user_id;
-  char *quality;
+  char *api_key;
+
+  /* required */
+  char *voice_name;
+
+  /* optional (else will choose defaults in backend) */
+  char *voice_engine;
   char *speed;
   char *seed;
   char *temperature;
-  char *voice_engine;
-  char *emotion;
+  char *top_p;
   char *voice_guidance;
   char *style_guidance;
   char *text_guidance;
+  char *repetition_penalty;
+  char *language; // Only applies to Play3.0 voice engine
+
+  /* DEPRECATED */
+  char *quality; // use sample rate to adjust quality
+  char *emotion;
 
   /* result data */
   long response_code;
@@ -37,5 +47,9 @@ typedef struct playht_data {
   void *circularBuffer;
   switch_mutex_t *mutex;
   FILE *file;
+
+  /* Play3.0 specific */
+  char *url;
+  int url_expires_at_ms;
 } playht_t;
 #endif

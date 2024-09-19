@@ -90,7 +90,7 @@ static CURL* createEasyHandle(void) {
   if(!easy) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "curl_easy_init() failed!\n");
     return nullptr ;
-  }  
+  }
 
   curl_easy_setopt(easy, CURLOPT_FOLLOWLOCATION, 1L);
   curl_easy_setopt(easy, CURLOPT_USERAGENT, "jambonz/0.8.5");
@@ -138,7 +138,7 @@ void check_multi_info(GlobalInfo_t *g) {
   ConnInfo_t *conn;
   CURL *easy;
   CURLcode res;
-  
+
   while((msg = curl_multi_info_read(g->multi, &msgs_left))) {
     if(msg->msg == CURLMSG_DONE) {
       long response_code;
@@ -163,7 +163,7 @@ void check_multi_info(GlobalInfo_t *g) {
       std::string connect_ms = secondsToMillisecondsString(connect);
       std::string final_response_time_ms = secondsToMillisecondsString(total);
 
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, 
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG,
         "mod_playht_tts: response: %ld, content-type %s,"
         "dns(ms): %"  CURL_FORMAT_CURL_OFF_T ".%06ld, "
         "connect(ms): %"  CURL_FORMAT_CURL_OFF_T ".%06ld, "
@@ -237,11 +237,11 @@ static void remsock(int *f, GlobalInfo_t *g) {
 static void event_cb(GlobalInfo_t *g, curl_socket_t s, int action, const boost::system::error_code & error, int *fdp) {
   int f = *fdp;
 
-  //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "event_cb socket %#X has action %d\n", s, action) ; 
+  //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "event_cb socket %#X has action %d\n", s, action) ;
 
   // Socket already POOL REMOVED.
   if (f == CURL_POLL_REMOVE) {
-    //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "event_cb socket %#X removed\n", s); 
+    //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "event_cb socket %#X removed\n", s);
     remsock(fdp, g);
     return;
   }
@@ -281,7 +281,7 @@ static void event_cb(GlobalInfo_t *g, curl_socket_t s, int action, const boost::
         tcp_socket->async_write_some(boost::asio::null_buffers(),
                                       boost::bind(&event_cb, g, s,
                                                   action, boost::placeholders::_1, fdp));
-      } 
+      }
     }
   }
 }
@@ -352,18 +352,18 @@ static int sock_cb(CURL *e, curl_socket_t s, int what, void *cbp, void *sockp) {
       setsock(actionp, s, e, what, *actionp, g);
     }
   }
-  return 0;  
+  return 0;
 }
 
-static void threadFunc() {      
+static void threadFunc() {
   /* to make sure the event loop doesn't terminate when there is no work to do */
   io_service.reset() ;
   boost::asio::io_service::work work(io_service);
-  
+
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "mod_playht_tts threadFunc - starting\n");
 
   for(;;) {
-      
+
     try {
       io_service.run() ;
       break ;
@@ -457,7 +457,7 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
   auto p = conn->playht;
   CircularBuffer_t *cBuffer = (CircularBuffer_t *) p->circularBuffer;
   std::vector<uint16_t> pcm_data;
-  
+
   if (conn->flushed || cBuffer == nullptr) {
     /* this will abort the transfer */
     return 0;
@@ -481,12 +481,12 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
 
     // Resize the buffer if necessary
     if (cBuffer->capacity() - cBuffer->size() < (bytesResampled / sizeof(uint16_t))) {
-      //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "write_cb growing buffer\n"); 
+      //switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "write_cb growing buffer\n");
 
       //TODO: if buffer exceeds some max size, return CURL_WRITEFUNC_ERROR to abort the transfer
       cBuffer->set_capacity(cBuffer->size() + std::max((bytesResampled / sizeof(uint16_t)), (size_t)BUFFER_GROW_SIZE));
     }
-    
+
     /* Push the data into the buffer */
     cBuffer->insert(cBuffer->end(), pcm_data.data(), pcm_data.data() + pcm_data.size());
 
@@ -546,6 +546,13 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "write_cb: session %s not found\n", p->session_id);
     }
   }
+  return bytes_received;
+}
+
+static size_t url_callback(void *ptr, size_t size, size_t nitems, void *userdata) {
+  std::string *buffer = static_cast<std::string*>(userdata);
+  size_t bytes_received = size * nitems;
+  buffer->append(static_cast<char*>(ptr), bytes_received);
   return bytes_received;
 }
 
@@ -781,6 +788,80 @@ extern "C" {
 
     /* format url*/
     std::string url = "https://api.play.ht/api/v2/tts/stream";
+    /* for 3.0 voice engine, we must get a url from the auth api */
+    if (p->voice_engine && strcmp(p->voice_engine, "Play3.0") == 0) {
+      /* if the url is expired or expiring in the next 30 seconds, get a new one */
+      if (p->url_expires_at_ms < (time(NULL) * 1000 + 30000)) {
+        std::string auth_url = "https://api.play.ht/api/v3/auth"
+        std::string readBuffer;
+
+        CURL* easy = createEasyHandle();
+        CURLcode res;
+
+        /* set up headers */
+        struct curl_slist* headers = NULL;
+        headers = curl_slist_append(headers, ("x-user-id: " + user_id).c_str());
+        headers = curl_slist_append(headers, ("authorization: Bearer " + api_key).c_str());
+
+        /* set CURL options */
+        curl_easy_setopt(easy, CURLOPT_URL, auth_url.c_str());
+        curl_easy_setopt(easy, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(easy, CURLOPT_POST, 1L);
+        curl_easy_setopt(easy, CURLOPT_WRITEDATA, &readBuffer);
+        curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, url_callback);
+
+        /* perform the request */
+        res = curl_easy_perform(easy);
+        if (res != CURLE_OK) {
+          switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error performing Play auth request: %s\n", curl_easy_strerror(res));
+          return SWITCH_STATUS_FALSE;
+        } else {
+          /* check HTTP response code */
+          long http_code = 0;
+          curl_easy_getinfo(easy, CURLINFO_RESPONSE_CODE, &http_code);
+          if (http_code == 200) {
+            /* parse JSON response */
+            cJSON *json = cJSON_Parse(readBuffer.c_str());
+            if (json == nullptr) {
+              switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error parsing Play auth JSON response\n");
+              return SWITCH_STATUS_FALSE;
+            } else {
+              cJSON *expires_item = cJSON_GetObjectItemCaseSensitive(json, "expires_at_ms");
+              if (expires_item && cJSON_IsNumber(expires_item)) {
+                p->url_expires_at_ms = expires_item->valueint;
+                cJSON_Delete(expires_item);
+              } else {
+                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error retrieving Play auth expiration from JSON response\n");
+                return SWITCH_STATUS_FALSE;
+              }
+              cJSON *url_item = cJSON_GetObjectItemCaseSensitive(json, "url");
+              if (url_item && cJSON_IsString(url_item)) {
+                p->url = strdup(url_item->valuestring);
+                cJSON_Delete(url_item);
+              } else {
+                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error retrieving Play auth url from JSON response\n");
+                return SWITCH_STATUS_FALSE;
+              }
+              cJSON_Delete(json);
+            }
+          } else {
+            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Play auth HTTP request failed with code %ld\n", http_code);
+            return SWITCH_STATUS_FALSE;
+          }
+        }
+
+        /* clean up */
+        curl_slist_free_all(headers);
+        curl_easy_cleanup(easy);
+      }
+      if (p->url) {
+        url = p->url;
+      } else {
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "No Play3.0 auth url available\n");
+        return SWITCH_STATUS_FALSE;
+      }
+
+    }
 
     /* create the JSON body */
     cJSON * jResult = cJSON_CreateObject();
@@ -791,32 +872,38 @@ extern "C" {
     if (p->voice_engine) {
       cJSON_AddStringToObject(jResult, "voice_engine", p->voice_engine);
     }
-    if (p->quality) {
+    if (p->quality) { // DEPRECATED, use sample rate to adjust quality
       cJSON_AddStringToObject(jResult, "quality", p->quality);
     }
     if (p->speed) {
-      double val = strtod(p->speed, NULL);
-      if (val != 0.0) {
-        cJSON_AddNumberToObject(jResult, "speed", val);
-      }
+      cJSON_AddNumberToObject(jResult, "speed", std::strtof(p->speed, nullptr));
     }
     if (p->seed) {
-      cJSON_AddNumberToObject(jResult, "seed", atoi(p->seed));
+      cJSON_AddNumberToObject(jResult, "seed", std::strtof(p->seed, nullptr));
     }
     if (p->temperature) {
       cJSON_AddNumberToObject(jResult, "temperature", std::strtof(p->temperature, nullptr));
     }
-    if (p->emotion) {
+    if (p->top_p) {
+      cJSON_AddNumberToObject(jResult, "top_p", std::strtof(p->top_p, nullptr));
+    }
+    if (p->emotion) { // DEPRECATED
       cJSON_AddStringToObject(jResult, "emotion", p->emotion);
     }
     if (p->voice_guidance) {
-      cJSON_AddNumberToObject(jResult, "voice_guidance", atoi(p->voice_guidance));
+      cJSON_AddNumberToObject(jResult, "voice_guidance", std::strtof(p->voice_guidance, nullptr));
     }
     if (p->style_guidance) {
-      cJSON_AddNumberToObject(jResult, "style_guidance", atoi(p->style_guidance));
+      cJSON_AddNumberToObject(jResult, "style_guidance", std::strtof(p->style_guidance, nullptr));
     }
     if (p->text_guidance) {
-      cJSON_AddNumberToObject(jResult, "text_guidance", atoi(p->text_guidance));
+      cJSON_AddNumberToObject(jResult, "text_guidance", std::strtof(p->text_guidance, nullptr));
+    }
+    if (p->repetition_penalty) {
+      cJSON_AddNumberToObject(jResult, "repetition_penalty", std::strtof(p->repetition_penalty, nullptr));
+    }
+    if (p->language) { // Only applies to Play3.0 voice engine
+      cJSON_AddStringToObject(jResult, "language", p->language);
     }
     char *json = cJSON_PrintUnformatted(jResult);
 
@@ -860,7 +947,7 @@ extern "C" {
     conn->file = p->file;
     conn->body = json;
     conn->flushed = false;
-    
+
 
     p->circularBuffer = (void *) new CircularBuffer_t(8192);
 
@@ -883,7 +970,7 @@ extern "C" {
     curl_easy_setopt(easy, CURLOPT_NOPROGRESS, 1L);
     curl_easy_setopt(easy, CURLOPT_HEADERFUNCTION, header_callback);
     curl_easy_setopt(easy, CURLOPT_HEADERDATA, conn);
-    
+
     /* call this function to get a socket */
     curl_easy_setopt(easy, CURLOPT_OPENSOCKETFUNCTION, opensocket);
 
@@ -925,7 +1012,7 @@ extern "C" {
       ConnInfo_t *conn = (ConnInfo_t *) p->conn;
       if (p->response_code > 0 && p->response_code != 200) {
         switch_mutex_unlock(p->mutex);
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "playht_speech_read_tts, returning failure\n") ;  
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "playht_speech_read_tts, returning failure\n") ;
         return SWITCH_STATUS_FALSE;
       }
       if (conn && conn->flushed) {
@@ -978,7 +1065,7 @@ extern "C" {
     if (p->cache_filename && !p->playback_start_sent) {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "removing audio cache file %s because download was interrupted\n", p->cache_filename);
       if (unlink(p->cache_filename) != 0) {
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "cleanupConn: error removing audio cache file %s: %d:%s\n", 
+        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "cleanupConn: error removing audio cache file %s: %d:%s\n",
           p->cache_filename, errno, strerror(errno));
       }
       free(p->cache_filename);
