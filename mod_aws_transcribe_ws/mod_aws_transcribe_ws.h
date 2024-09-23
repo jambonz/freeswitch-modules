@@ -1,12 +1,12 @@
-#ifndef __MOD_AWS_TRANSCRIBE_H__
-#define __MOD_AWS_TRANSCRIBE_H__
+#ifndef __MOD_AWS_TRANSCRIBE_WS_H__
+#define __MOD_AWS_TRANSCRIBE_WS_H__
 
 #include <switch.h>
 #include <speex/speex_resampler.h>
 
 #include <unistd.h>
 
-#define MY_BUG_NAME "aws_transcribe"
+#define MY_BUG_NAME "aws_transcribe_ws"
 #define MAX_BUG_LEN (64)
 #define MAX_SESSION_ID (256)
 #define TRANSCRIBE_EVENT_RESULTS "aws_transcribe::transcription"

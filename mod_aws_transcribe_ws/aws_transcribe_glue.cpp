@@ -15,7 +15,7 @@
 #include <iostream>
 #include <unordered_map>
 
-#include "mod_aws_transcribe.h"
+#include "mod_aws_transcribe_ws.h"
 #include "simple_buffer.h"
 //#include "parser.hpp"
 #include "audio_pipe.hpp"

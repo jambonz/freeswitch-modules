@@ -3,14 +3,14 @@
  * mod_aws_transcribe.c -- Freeswitch module for using aws streaming transcribe api
  *
  */
-#include "mod_aws_transcribe.h"
+#include "mod_aws_transcribe_ws.h"
 #include "aws_transcribe_glue.h"
 
 /* Prototypes */
-SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_aws_transcribe_shutdown);
-SWITCH_MODULE_LOAD_FUNCTION(mod_aws_transcribe_load);
+SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_aws_transcribe_ws_shutdown);
+SWITCH_MODULE_LOAD_FUNCTION(mod_aws_transcribe_ws_load);
 
-SWITCH_MODULE_DEFINITION(mod_aws_transcribe, mod_aws_transcribe_load, mod_aws_transcribe_shutdown, NULL);
+SWITCH_MODULE_DEFINITION(mod_aws_transcribe_ws, mod_aws_transcribe_ws_load, mod_aws_transcribe_ws_shutdown, NULL);
 
 static switch_status_t do_stop(switch_core_session_t *session, char* bugname);
 
@@ -172,7 +172,7 @@ SWITCH_STANDARD_API(aws_transcribe_function)
 }
 
 
-SWITCH_MODULE_LOAD_FUNCTION(mod_aws_transcribe_load)
+SWITCH_MODULE_LOAD_FUNCTION(mod_aws_transcribe_ws_load)
 {
 	switch_api_interface_t *api_interface;
 
@@ -203,8 +203,8 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_aws_transcribe_load)
 
 /*
   Called when the system shuts down
-  Macro expands to: switch_status_t mod_aws_transcribe_shutdown() */
-SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_aws_transcribe_shutdown)
+  Macro expands to: switch_status_t mod_aws_transcribe_ws_shutdown() */
+SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_aws_transcribe_ws_shutdown)
 {
 	aws_transcribe_cleanup();
 	switch_event_free_subclass(TRANSCRIBE_EVENT_RESULTS);
