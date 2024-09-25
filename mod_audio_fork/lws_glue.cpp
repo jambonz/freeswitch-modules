@@ -557,7 +557,7 @@ namespace {
       tech_pvt->streamingPreBuffer = nullptr;
     }
 
-    if (nullptr == tech_pvt->pVecMarksInInventory) {
+    if (tech_pvt->pVecMarksInInventory) {
       delete static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInInventory);
       tech_pvt->pVecMarksInInventory = nullptr;
       delete static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInUse);
