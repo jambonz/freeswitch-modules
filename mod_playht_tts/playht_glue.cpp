@@ -816,7 +816,7 @@ extern "C" {
       cJSON_AddNumberToObject(jResult, "text_guidance", atoi(p->text_guidance));
     }
     if (strcmp(p->voice_engine, "Play3.0") == 0 && p->language) {
-      cJSON_AddNumberToObject(jResult, "language", atoi(p->language));
+      cJSON_AddStringToObject(jResult, "language", p->language);
     }
     char *json = cJSON_PrintUnformatted(jResult);
 
