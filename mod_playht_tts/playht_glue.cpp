@@ -780,7 +780,7 @@ extern "C" {
     }
 
     /* format url*/
-    std::string url = "https://api.play.ht/api/v2/tts/stream";
+    std::string url = p->synthesize_url;
 
     /* create the JSON body */
     cJSON * jResult = cJSON_CreateObject();
@@ -800,9 +800,6 @@ extern "C" {
         cJSON_AddNumberToObject(jResult, "speed", val);
       }
     }
-    if (p->seed) {
-      cJSON_AddNumberToObject(jResult, "seed", atoi(p->seed));
-    }
     if (p->temperature) {
       cJSON_AddNumberToObject(jResult, "temperature", std::strtof(p->temperature, nullptr));
     }
@@ -817,6 +814,9 @@ extern "C" {
     }
     if (p->text_guidance) {
       cJSON_AddNumberToObject(jResult, "text_guidance", atoi(p->text_guidance));
+    }
+    if (strcmp(p->voice_engine, "Play3.0") == 0 && p->language) {
+      cJSON_AddStringToObject(jResult, "language", p->language);
     }
     char *json = cJSON_PrintUnformatted(jResult);
 
@@ -889,9 +889,12 @@ extern "C" {
 
     /* call this function to close a socket */
     curl_easy_setopt(easy, CURLOPT_CLOSESOCKETFUNCTION, close_socket);
+    // Play3.0 voice engine doesn't need authorization
+    if (strcmp(p->voice_engine, "Play3.0") != 0) {
+      conn->hdr_list = curl_slist_append(conn->hdr_list, api_key_stream.str().c_str());
+      conn->hdr_list = curl_slist_append(conn->hdr_list, user_id_stream.str().c_str());
+    }
 
-    conn->hdr_list = curl_slist_append(conn->hdr_list, api_key_stream.str().c_str());
-    conn->hdr_list = curl_slist_append(conn->hdr_list, user_id_stream.str().c_str());
     conn->hdr_list = curl_slist_append(conn->hdr_list, "Accept: audio/mpeg");
     conn->hdr_list = curl_slist_append(conn->hdr_list, "Content-Type: application/json");
     curl_easy_setopt(easy, CURLOPT_HTTPHEADER, conn->hdr_list);

@@ -14,6 +14,8 @@ static void clearPlayht(playht_t* p, int freeAll) {
   if (p->seed) free(p->seed);
   if (p->temperature) free(p->temperature);
   if (p->voice_engine) free(p->voice_engine);
+  if (p->synthesize_url) free(p->synthesize_url);
+  if (p->language) free(p->language);
   if (p->emotion) free(p->emotion);
   if (p->voice_guidance) free(p->voice_guidance);
   if (p->style_guidance) free(p->style_guidance);
@@ -36,6 +38,8 @@ static void clearPlayht(playht_t* p, int freeAll) {
   p->seed = NULL;
   p->temperature = NULL;
   p->voice_engine = NULL;
+  p->synthesize_url = NULL;
+  p->language = NULL;
   p->emotion = NULL;
   p->voice_guidance = NULL;
   p->style_guidance = NULL;
@@ -154,6 +158,12 @@ static void p_text_param_tts(switch_speech_handle_t *sh, char *param, const char
   } else if (0 == strcmp(param, "voice_engine")) {
     if (p->voice_engine) free(p->voice_engine);
     p->voice_engine = strdup(val);
+  } else if (0 == strcmp(param, "synthesize_url")) {
+    if (p->synthesize_url) free(p->synthesize_url);
+    p->synthesize_url = strdup(val);
+  } else if (0 == strcmp(param, "language")) {
+    if (p->language) free(p->language);
+    p->language = strdup(val);
   } else if (0 == strcmp(param, "emotion")) {
     if (p->emotion) free(p->emotion);
     p->emotion = strdup(val);
