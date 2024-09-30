@@ -557,7 +557,7 @@ namespace {
       tech_pvt->streamingPreBuffer = nullptr;
     }
 
-    if (nullptr == tech_pvt->pVecMarksInInventory) {
+    if (tech_pvt->pVecMarksInInventory) {
       delete static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInInventory);
       tech_pvt->pVecMarksInInventory = nullptr;
       delete static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInUse);
@@ -979,7 +979,7 @@ extern "C" {
         std::deque<std::string>* pVecInventory = nullptr;
         std::deque<std::string>* pVecInUse = nullptr;
         std::deque<std::string>* pVecCleared = nullptr;
-        if (nullptr != tech_pvt->pVecMarksInUse) {
+        if (tech_pvt->pVecMarksInInventory && tech_pvt->pVecMarksInUse && tech_pvt->pVecMarksCleared) {
           pVecInventory = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInInventory);
           pVecInUse = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksInUse);
           pVecCleared = static_cast<std::deque<std::string>*>(tech_pvt->pVecMarksCleared);
@@ -1032,7 +1032,7 @@ extern "C" {
 
           if (samplesToCopy > 0) {
             vector_add(fp, data, rframe->samples);
-          } else if (pVecInventory != nullptr && pVecInventory->size()) {
+          } else if (pVecInventory && pVecInventory->size()) {
             // no bidirectional audio to dub but still have some mark in inventory, send them now
             auto name = pVecInventory->front();
             pVecInventory->pop_front();
