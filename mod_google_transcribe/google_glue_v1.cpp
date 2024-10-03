@@ -233,6 +233,10 @@ static void *SWITCH_THREAD_FUNC grpc_read_thread(switch_thread_t *thread, void *
     auto speech_event_type = response.speech_event_type();
     if (response.has_error()) {
       Status status = response.error();
+      //error 11 is handled in finished session, avoid sending jambonz_transcribe::error event for this here.
+      if (11 == status.code()) {
+        continue;
+      }
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "grpc_read_thread: error %s (%d)\n", status.message().c_str(), status.code()) ;
       cJSON* json = cJSON_CreateObject();
       cJSON_AddStringToObject(json, "type", "error");
