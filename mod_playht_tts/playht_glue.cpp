@@ -818,6 +818,12 @@ extern "C" {
     if (strcmp(p->voice_engine, "Play3.0") == 0 && p->language) {
       cJSON_AddStringToObject(jResult, "language", p->language);
     }
+    if (p->repetition_penalty) {
+      cJSON_AddNumberToObject(jResult, "repetition_penalty", std::strtof(p->repetition_penalty, nullptr));
+    }
+    if (p->top_p) {
+      cJSON_AddNumberToObject(jResult, "top_p", std::strtof(p->top_p, nullptr));
+    }
     char *json = cJSON_PrintUnformatted(jResult);
 
     cJSON_Delete(jResult);

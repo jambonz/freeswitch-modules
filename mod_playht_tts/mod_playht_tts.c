@@ -16,6 +16,8 @@ static void clearPlayht(playht_t* p, int freeAll) {
   if (p->voice_engine) free(p->voice_engine);
   if (p->synthesize_url) free(p->synthesize_url);
   if (p->language) free(p->language);
+  if (p->top_p) free(p->top_p);
+  if (p->repetition_penalty) free(p->repetition_penalty);
   if (p->emotion) free(p->emotion);
   if (p->voice_guidance) free(p->voice_guidance);
   if (p->style_guidance) free(p->style_guidance);
@@ -40,6 +42,8 @@ static void clearPlayht(playht_t* p, int freeAll) {
   p->voice_engine = NULL;
   p->synthesize_url = NULL;
   p->language = NULL;
+  p->top_p = NULL;
+  p->repetition_penalty = NULL;
   p->emotion = NULL;
   p->voice_guidance = NULL;
   p->style_guidance = NULL;
@@ -164,6 +168,12 @@ static void p_text_param_tts(switch_speech_handle_t *sh, char *param, const char
   } else if (0 == strcmp(param, "language")) {
     if (p->language) free(p->language);
     p->language = strdup(val);
+  } else if (0 == strcmp(param, "top_p")) {
+    if (p->top_p) free(p->top_p);
+    p->top_p = strdup(val);
+  } else if (0 == strcmp(param, "repetition_penalty")) {
+    if (p->repetition_penalty) free(p->repetition_penalty);
+    p->repetition_penalty = strdup(val);
   } else if (0 == strcmp(param, "emotion")) {
     if (p->emotion) free(p->emotion);
     p->emotion = strdup(val);
