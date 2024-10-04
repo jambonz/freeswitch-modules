@@ -968,8 +968,11 @@ extern "C" {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "playht_speech_flush_tts, download complete? %s\n", download_complete ? "yes" : "no") ;
     ConnInfo_t *conn = (ConnInfo_t *) p->conn;
     CircularBuffer_t *cBuffer = (CircularBuffer_t *) p->circularBuffer;
+    // In multi threads, only delete the circular buffer when write and read buffer action finished using it.
+    switch_mutex_lock(p->mutex);
     delete cBuffer;
     p->circularBuffer = nullptr ;
+    switch_mutex_unlock(p->mutex);
 
     if (conn) {
       conn->flushed = true;
