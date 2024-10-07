@@ -72,10 +72,7 @@ public:
 		if (switch_true(switch_channel_get_variable(channel, "AZURE_USE_OUTPUT_FORMAT_DETAILED"))) {
 			speechConfig->SetOutputFormat(OutputFormat::Detailed);
 		}
-		if (nullptr != endpointId) {
-      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(psession), SWITCH_LOG_DEBUG, "setting endpoint id: %s\n", endpointId);
-			speechConfig->SetEndpointId(endpointId);
-		}
+
 		if (!sdkInitialized && sdkLog) {
 			sdkInitialized = true;
 			speechConfig->SetProperty(PropertyId::Speech_LogFilename, sdkLog);
@@ -104,11 +101,31 @@ public:
 				languages.push_back( alt_langs[i]);
         switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(psession), SWITCH_LOG_DEBUG, "added alternative lang %s\n", alt_langs[i]);
       }
-			auto autoDetectSourceLanguageConfig = AutoDetectSourceLanguageConfig::FromLanguages(languages);
+
+			std::vector<std::shared_ptr<SourceLanguageConfig>> sourceLanguageConfigs;
+			for (const auto& language : languages) {
+					std::shared_ptr<SourceLanguageConfig> sourceLanguageConfig;
+					
+					if (endpointId != nullptr) {
+							sourceLanguageConfig = SourceLanguageConfig::FromLanguage(language, endpointId);
+					} else {
+							sourceLanguageConfig = SourceLanguageConfig::FromLanguage(language);
+					}
+
+					sourceLanguageConfigs.push_back(sourceLanguageConfig);
+			}
+
+			// Create AutoDetectSourceLanguageConfig from SourceLanguageConfigs
+			auto autoDetectSourceLanguageConfig = AutoDetectSourceLanguageConfig::FromSourceLanguageConfigs(sourceLanguageConfigs);
 			m_recognizer = SpeechRecognizer::FromConfig(speechConfig, autoDetectSourceLanguageConfig, audioConfig);
     }
 		else {
-			auto sourceLanguageConfig = SourceLanguageConfig::FromLanguage(lang);
+			std::shared_ptr<SourceLanguageConfig> sourceLanguageConfig;
+			if (endpointId != nullptr) {
+					sourceLanguageConfig = SourceLanguageConfig::FromLanguage(lang, endpointId);
+			} else {
+					sourceLanguageConfig = SourceLanguageConfig::FromLanguage(lang);
+			}
 			m_recognizer = SpeechRecognizer::FromConfig(speechConfig, sourceLanguageConfig, audioConfig);
 		}
 
