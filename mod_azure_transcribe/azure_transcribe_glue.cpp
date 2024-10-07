@@ -72,10 +72,7 @@ public:
 		if (switch_true(switch_channel_get_variable(channel, "AZURE_USE_OUTPUT_FORMAT_DETAILED"))) {
 			speechConfig->SetOutputFormat(OutputFormat::Detailed);
 		}
-		if (nullptr != endpointId) {
-      switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(psession), SWITCH_LOG_DEBUG, "setting endpoint id: %s\n", endpointId);
-			speechConfig->SetEndpointId(endpointId);
-		}
+
 		if (!sdkInitialized && sdkLog) {
 			sdkInitialized = true;
 			speechConfig->SetProperty(PropertyId::Speech_LogFilename, sdkLog);
@@ -104,11 +101,31 @@ public:
 				languages.push_back( alt_langs[i]);
         switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(psession), SWITCH_LOG_DEBUG, "added alternative lang %s\n", alt_langs[i]);
       }
-			auto autoDetectSourceLanguageConfig = AutoDetectSourceLanguageConfig::FromLanguages(languages);
+
+			std::vector<std::shared_ptr<SourceLanguageConfig>> sourceLanguageConfigs;
+			for (const auto& language : languages) {
+					std::shared_ptr<SourceLanguageConfig> sourceLanguageConfig;
+					
+					if (endpointId != nullptr) {
+							sourceLanguageConfig = SourceLanguageConfig::FromLanguage(language, endpointId);
+					} else {
+							sourceLanguageConfig = SourceLanguageConfig::FromLanguage(language);
+					}
+
+					sourceLanguageConfigs.push_back(sourceLanguageConfig);
+			}
+
+			// Create AutoDetectSourceLanguageConfig from SourceLanguageConfigs
+			auto autoDetectSourceLanguageConfig = AutoDetectSourceLanguageConfig::FromSourceLanguageConfigs(sourceLanguageConfigs);
 			m_recognizer = SpeechRecognizer::FromConfig(speechConfig, autoDetectSourceLanguageConfig, audioConfig);
     }
 		else {
-			auto sourceLanguageConfig = SourceLanguageConfig::FromLanguage(lang);
+			std::shared_ptr<SourceLanguageConfig> sourceLanguageConfig;
+			if (endpointId != nullptr) {
+					sourceLanguageConfig = SourceLanguageConfig::FromLanguage(lang, endpointId);
+			} else {
+					sourceLanguageConfig = SourceLanguageConfig::FromLanguage(lang);
+			}
 			m_recognizer = SpeechRecognizer::FromConfig(speechConfig, sourceLanguageConfig, audioConfig);
 		}
 
@@ -487,20 +504,27 @@ extern "C" {
 		auto read_codec = switch_core_session_get_read_codec(session);
 		uint32_t sampleRate = read_codec->implementation->actual_samples_per_second;
 		if (bug) {
-			struct cap_cb* existing_cb = (struct cap_cb*) switch_core_media_bug_get_user_data(bug);
-			GStreamer* existing_streamer = (GStreamer*) existing_cb->streamer;
-			existing_cb->is_keep_alive = 0;
-			if (!existing_streamer->hasConfigurationChanged(channels, lang, interim, sampleRate, region, subscriptionKey)) {
-				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Reuse active azure connection.\n");
+			try {
+				struct cap_cb* existing_cb = (struct cap_cb*) switch_core_media_bug_get_user_data(bug);
+				GStreamer* existing_streamer = (GStreamer*) existing_cb->streamer;
+				existing_cb->is_keep_alive = 0;
+				if (!existing_streamer->hasConfigurationChanged(channels, lang, interim, sampleRate, region, subscriptionKey)) {
+					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Reuse active azure connection.\n");
+					return SWITCH_STATUS_SUCCESS;
+				}
+				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Azure configuration is changed, destroy old and create new azure connection\n");
+				reaper(existing_cb);
+				streamer =  new GStreamer(sessionId, bugname, channels, lang, interim, sampleRate, region, subscriptionKey, responseHandler);
+				if (!existing_cb->vad) streamer->connect();
+				existing_cb->streamer = streamer;
+				*ppUserData = existing_cb;
 				return SWITCH_STATUS_SUCCESS;
+			} catch (std::exception& e) {
+				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "%s: Error initializing gstreamer: %s.\n", 
+					switch_channel_get_name(channel), e.what());
+				return SWITCH_STATUS_FALSE;
 			}
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Azure configuration is changed, destroy old and create new azure connection\n");
-			reaper(existing_cb);
-			streamer =  new GStreamer(sessionId, bugname, channels, lang, interim, sampleRate, region, subscriptionKey, responseHandler);
-			if (!existing_cb->vad) streamer->connect();
-			existing_cb->streamer = streamer;
-			*ppUserData = existing_cb;
-			return SWITCH_STATUS_SUCCESS;
+			
 		}
 		int err;
 		switch_threadattr_t *thd_attr = NULL;
