@@ -11,10 +11,14 @@ typedef struct playht_data {
   char *seed;
   char *temperature;
   char *voice_engine;
+  char *synthesize_url;
+  char *language;
   char *emotion;
   char *voice_guidance;
   char *style_guidance;
   char *text_guidance;
+  char *top_p;
+  char *repetition_penalty;
 
   /* result data */
   long response_code;
