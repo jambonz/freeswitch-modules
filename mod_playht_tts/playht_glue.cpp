@@ -45,6 +45,27 @@ typedef struct
   bool flushed;
 } ConnInfo_t;
 
+typedef struct {
+  // RIFF Header
+  char riff[4]; // "RIFF"
+  uint32_t chunk_size;
+  char wave[4]; // "WAVE"
+
+  // fmt subchunk
+  char fmt[4]; // "fmt "
+  uint32_t subchunk1_size; // 16 for PCM
+  uint16_t audio_format; // 1 for PCM
+  uint16_t num_channels;
+  uint32_t sample_rate;
+  uint32_t byte_rate;
+  uint16_t block_align;
+  uint16_t bits_per_sample;
+
+  // data subchunk
+  char data[4]; // "data"
+  uint32_t data_size;
+} WAVHeader;
+
 
 static boost::object_pool<ConnInfo_t> pool ;
 static std::map<curl_socket_t, boost::asio::ip::tcp::socket *> socket_map;
@@ -62,6 +83,41 @@ std::string secondsToMillisecondsString(double seconds) {
 
     // Convert to string
     return std::to_string(milliseconds_long);
+}
+
+static void write_placeholder_wav_header(FILE *file, uint16_t num_channels, uint32_t sample_rate, uint16_t bits_per_sample) {
+    WAVHeader header;
+    memcpy(header.riff, "RIFF", 4);
+    header.chunk_size = 0; // Placeholder
+    memcpy(header.wave, "WAVE", 4);
+    memcpy(header.fmt, "fmt ", 4);
+    header.subchunk1_size = 16;
+    header.audio_format = 1; // PCM
+    header.num_channels = num_channels;
+    header.sample_rate = sample_rate;
+    header.bits_per_sample = bits_per_sample;
+    header.byte_rate = sample_rate * num_channels * bits_per_sample / 8;
+    header.block_align = num_channels * bits_per_sample / 8;
+    memcpy(header.data, "data", 4);
+    header.data_size = 0; // Placeholder
+
+    fwrite(&header, sizeof(WAVHeader), 1, file);
+}
+
+static void update_wav_header(FILE *file, uint32_t data_size) {
+    // Calculate sizes
+    uint32_t chunk_size = 36 + data_size;
+
+    // Seek to beginning
+    fseek(file, 0, SEEK_SET);
+
+    // Update RIFF chunk size
+    fwrite("RIFF", 4, 1, file);
+    fwrite(&chunk_size, 4, 1, file);
+
+    // Skip to data chunk size
+    fseek(file, 40, SEEK_SET);
+    fwrite(&data_size, 4, 1, file);
 }
 
 static std::string getEnvVar(const std::string& varName) {
@@ -478,6 +534,7 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, ConnInfo_t *conn) {
 
     /* cache same data to avoid streaming and cached audio quality is different*/
     if (conn->file) fwrite(pcm_data.data(), sizeof(uint8_t), bytesResampled, conn->file);
+    p->bytes_written += bytesResampled;
 
     // Resize the buffer if necessary
     if (cBuffer->capacity() - cBuffer->size() < (bytesResampled / sizeof(uint16_t))) {
@@ -751,7 +808,7 @@ extern "C" {
       switch_uuid_get(&uuid);
       switch_uuid_format(uuid_str, &uuid);
 
-      switch_snprintf(outfile, sizeof(outfile), "%s%s%s.mp3", fullDirPath.c_str(), SWITCH_PATH_SEPARATOR, uuid_str);
+      switch_snprintf(outfile, sizeof(outfile), "%s%s%s.wav", fullDirPath.c_str(), SWITCH_PATH_SEPARATOR, uuid_str);
       p->cache_filename = strdup(outfile);
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "writing audio cache file to %s\n", p->cache_filename);
 
@@ -763,6 +820,8 @@ extern "C" {
       }
       else {
         p->file = fdopen(fd, "wb");
+        write_placeholder_wav_header(p->file, 1, 8000, 16);
+
         if (!p->file) {
           close(fd);
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error opening cache file %s: %s\n", outfile, strerror(errno));
@@ -976,6 +1035,7 @@ extern "C" {
 
     if (conn) {
       conn->flushed = true;
+      update_wav_header(conn->file, p->bytes_written);
       if (!download_complete) {
         if (conn->file) {
           switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "closing audio cache file %s because download was interrupted\n", p->cache_filename);

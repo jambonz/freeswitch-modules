@@ -36,6 +36,7 @@ typedef struct playht_data {
   int reads;
   int cache_audio;
   int playback_start_sent;
+  int bytes_written;
 
 	void *conn;
   void *circularBuffer;
